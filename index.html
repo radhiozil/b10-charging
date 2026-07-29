@@ -114,7 +114,7 @@
 
         .config-grid {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr 1fr;
             gap: 1rem;
         }
 
@@ -145,6 +145,16 @@
             justify-content: space-between;
             align-items: center;
         }
+
+        .status-pill {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 20px;
+            font-weight: 700;
+        }
+
+        .pill-valid { background: rgba(16,185,129,0.2); color: var(--accent-green); }
+        .pill-warn { background: rgba(245,158,11,0.2); color: var(--accent-orange); }
 
         .charger-card {
             background: var(--card-bg);
@@ -224,6 +234,7 @@
         }
 
         @media (max-width: 600px) {
+            .config-grid { grid-template-columns: 1fr; }
             .metrics-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
@@ -233,14 +244,18 @@
 <div class="container">
     <header>
         <h1>EV Charging Strategy Calculator</h1>
-        <p>Leapmotor B10 Life • Monthly kWh allocation by charging option</p>
+        <p>Leapmotor B10 Life • Distance-Based Charging Planner</p>
     </header>
 
-    <!-- Global Parameter -->
+    <!-- Global Parameters -->
     <div class="config-card">
         <div class="config-grid">
             <div class="input-group">
-                <label>Efficiency (kWh / 100km)</label>
+                <label>Monthly Target Distance (km)</label>
+                <input type="number" id="distance" value="1500" step="50" oninput="calculate()">
+            </div>
+            <div class="input-group">
+                <label>Car Efficiency (kWh / 100km)</label>
                 <input type="number" id="efficiency" value="14.5" step="0.5" oninput="calculate()">
             </div>
         </div>
@@ -251,12 +266,12 @@
         <div class="metric-card highlight">
             <div class="metric-label">Monthly Cost</div>
             <div class="metric-value" id="totalCost">RM 0.00</div>
-            <div class="metric-sub" id="energyNeeded">0 kWh / month</div>
+            <div class="metric-sub" id="energyNeeded">Required: 0 kWh</div>
         </div>
         <div class="metric-card">
-            <div class="metric-label">Estimated Distance</div>
-            <div class="metric-value" id="estDistance">0 km</div>
-            <div class="metric-sub">Based on total kWh</div>
+            <div class="metric-label">Allocated Distance</div>
+            <div class="metric-value" id="allocatedDist">0 km</div>
+            <div class="metric-sub" id="targetDistSub">Target: 1,500 km</div>
         </div>
         <div class="metric-card">
             <div class="metric-label">Effective Rate</div>
@@ -280,6 +295,7 @@
 
     <div class="section-title">
         <span>Monthly kWh Allocation</span>
+        <span id="allocPill" class="status-pill pill-valid">Allocated: 0 / 0 kWh</span>
     </div>
 
     <!-- Option 1: 3.7 kW Granny -->
@@ -296,7 +312,7 @@
         </div>
         <div class="charger-stats">
             <span>Rate: RM 0.30 / kWh (TNB Domestic)</span>
-            <span id="stat1">RM 0.00 • 0 hrs (0%)</span>
+            <span id="stat1">RM 0.00 • 0 hrs (0 km)</span>
         </div>
     </div>
 
@@ -314,7 +330,7 @@
         </div>
         <div class="charger-stats">
             <span>Rate: RM 0.30 / kWh (TNB Domestic)</span>
-            <span id="stat2">RM 0.00 • 0 hrs (0%)</span>
+            <span id="stat2">RM 0.00 • 0 hrs (0 km)</span>
         </div>
     </div>
 
@@ -323,7 +339,7 @@
         <div class="charger-header">
             <div class="charger-name">
                 <span class="dot" style="background: var(--accent-blue);"></span>
-                3. Office 11 kW AC Charger (Max B10 OBC Rate)
+                3. Office 11 kW AC Charger (Full B10 11kW Speed)
             </div>
             <div class="charger-input-wrap">
                 <input type="number" id="kwh3" value="135" min="0" step="5" oninput="calculate()">
@@ -332,7 +348,7 @@
         </div>
         <div class="charger-stats">
             <span>Rate: RM 0.28 / kWh</span>
-            <span id="stat3">RM 0.00 • 0 hrs (0%)</span>
+            <span id="stat3">RM 0.00 • 0 hrs (0 km)</span>
         </div>
     </div>
 
@@ -344,29 +360,33 @@
                 4. DC Public Fast Charger (100 kW+)
             </div>
             <div class="charger-input-wrap">
-                <input type="number" id="kwh4" value="20" min="0" step="5" oninput="calculate()">
+                <input type="number" id="kwh4" value="22.5" min="0" step="5" oninput="calculate()">
                 <span class="unit-label">kWh</span>
             </div>
         </div>
         <div class="charger-stats">
             <span>Rate: RM 1.40 / kWh</span>
-            <span id="stat4">RM 0.00 • 0 hrs (0%)</span>
+            <span id="stat4">RM 0.00 • 0 hrs (0 km)</span>
         </div>
     </div>
 
 </div>
 
 <script>
-    // Hardware charging specs & rates
+    // Hardware charging specs & rates for Leapmotor B10
     const chargers = [
-        { rate: 0.30, power: 3.7 },   // 1. Granny Charger (3.7 kW @ RM 0.30/kWh)
-        { rate: 0.30, power: 7.0 },   // 2. Home Wallbox (7.0 kW @ RM 0.30/kWh)
-        { rate: 0.28, power: 11.0 },  // 3. Office AC (11 kW full speed @ RM 0.28/kWh)
-        { rate: 1.40, power: 100.0 }  // 4. DC Fast Charger (100 kW @ RM 1.40/kWh)
+        { rate: 0.30, power: 3.7 },   // 1. Portable Granny Charger (3.7 kW)
+        { rate: 0.30, power: 7.0 },   // 2. Home Wallbox (7.0 kW)
+        { rate: 0.28, power: 11.0 },  // 3. Office AC (11.0 kW max B10 OBC capability)
+        { rate: 1.40, power: 100.0 }  // 4. DC Fast Charger (100 kW+)
     ];
 
     function calculate() {
+        const targetDist = parseFloat(document.getElementById('distance').value) || 0;
         const eff = parseFloat(document.getElementById('efficiency').value) || 14.5;
+
+        // Calculate total required kWh for the target distance
+        const reqKWh = eff > 0 ? (targetDist / 100) * eff : 0;
 
         // Retrieve raw kWh values from inputs
         const kwhArr = [
@@ -376,9 +396,9 @@
             parseFloat(document.getElementById('kwh4').value) || 0
         ];
 
-        const totalKWh = kwhArr.reduce((a, b) => a + b, 0);
+        const totalAllocKWh = kwhArr.reduce((a, b) => a + b, 0);
 
-        // Calculate total cost & hours
+        // Calculate total cost, hours & allocated distance
         let totalCost = 0;
         let totalHours = 0;
 
@@ -386,7 +406,8 @@
             const segKWh = kwhArr[i];
             const segCost = segKWh * chargers[i].rate;
             const segHours = chargers[i].power > 0 ? (segKWh / chargers[i].power) : 0;
-            const segPct = totalKWh > 0 ? ((segKWh / totalKWh) * 100).toFixed(1) : 0;
+            const segDist = eff > 0 ? (segKWh / eff) * 100 : 0;
+            const segPct = totalAllocKWh > 0 ? ((segKWh / totalAllocKWh) * 100).toFixed(1) : 0;
 
             totalCost += segCost;
             totalHours += segHours;
@@ -395,17 +416,26 @@
             document.getElementById(`bar${i+1}`).style.width = `${segPct}%`;
 
             // Card stats summary line
-            document.getElementById(`stat${i+1}`).innerText = `RM ${segCost.toFixed(2)} • ${segHours.toFixed(1)} hrs (${segPct}%)`;
+            document.getElementById(`stat${i+1}`).innerText = `RM ${segCost.toFixed(2)} • ${segHours.toFixed(1)} hrs (${Math.round(segDist)} km)`;
         }
 
-        // Summary Calculations
-        const estDist = eff > 0 ? (totalKWh / eff) * 100 : 0;
-        const avgRate = totalKWh > 0 ? (totalCost / totalKWh) : 0;
+        const totalAllocDist = eff > 0 ? (totalAllocKWh / eff) * 100 : 0;
+        const avgRate = totalAllocKWh > 0 ? (totalCost / totalAllocKWh) : 0;
+
+        // Update status pill
+        const pill = document.getElementById('allocPill');
+        pill.innerText = `Allocated: ${totalAllocKWh.toFixed(1)} / ${reqKWh.toFixed(1)} kWh`;
+        if (Math.abs(totalAllocKWh - reqKWh) < 0.5) {
+            pill.className = "status-pill pill-valid";
+        } else {
+            pill.className = "status-pill pill-warn";
+        }
 
         // Render Outputs
         document.getElementById('totalCost').innerText = `RM ${totalCost.toFixed(2)}`;
-        document.getElementById('energyNeeded').innerText = `${totalKWh.toFixed(1)} kWh / month`;
-        document.getElementById('estDistance').innerText = `${Math.round(estDist)} km`;
+        document.getElementById('energyNeeded').innerText = `Req: ${reqKWh.toFixed(1)} kWh / month`;
+        document.getElementById('allocatedDist').innerText = `${Math.round(totalAllocDist)} km`;
+        document.getElementById('targetDistSub').innerText = `Target: ${Math.round(targetDist)} km`;
         document.getElementById('effectiveRate').innerText = `RM ${avgRate.toFixed(2)}`;
         document.getElementById('totalHours').innerText = `${Math.round(totalHours)} hrs`;
     }
