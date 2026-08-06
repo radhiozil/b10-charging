@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leapmotor B10 Life - Charging Strategy Calculator</title>
+    <title>Leapmotor B10 - Charging Log & Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js Library for Graphical Statistics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -16,432 +18,486 @@
             --text-main: #f8fafc;
             --text-sub: #94a3b8;
             --border-color: #334155;
+            --danger-red: #ef4444;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 1.5rem; min-height: 100vh; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 900px; }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            padding: 1.5rem;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-        }
+        header { text-align: center; margin-bottom: 1.5rem; }
+        header h1 { font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        header p { color: var(--text-sub); font-size: 0.9rem; margin-top: 0.3rem; }
 
-        .container {
-            width: 100%;
-            max-width: 850px;
-        }
+        /* Navigation Tabs */
+        .tabs-nav { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); }
+        .tab-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.75rem 1.25rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s ease; }
+        .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
 
-        header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
+        /* Tab Content Display Logic */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
-        header h1 {
-            font-size: 1.8rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #38bdf8, #818cf8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+        /* General Card & Forms */
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .card-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main); }
+        
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group label { font-size: 0.8rem; color: var(--text-sub); font-weight: 600; }
+        .form-group input, .form-group select { background: #0f172a; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.8rem; color: #fff; font-size: 0.95rem; font-weight: 600; outline: none; }
+        .form-group input:focus, .form-group select:focus { border-color: var(--accent-blue); }
+        
+        .btn { background: var(--accent-blue); color: #fff; border: none; border-radius: 8px; padding: 0.75rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; width: 100%; margin-top: 1rem; }
+        .btn:hover { opacity: 0.9; }
+        .btn-danger { background: var(--danger-red); font-size: 0.75rem; color: #fff; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; }
 
-        header p {
-            color: var(--text-sub);
-            font-size: 0.9rem;
-            margin-top: 0.3rem;
-        }
+        /* Tab 2 Controls */
+        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .toggle-group { display: flex; background: #0f172a; padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color); }
+        .toggle-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 700; border-radius: 6px; cursor: pointer; }
+        .toggle-btn.active { background: var(--accent-blue); color: #fff; }
 
-        /* Top Metrics Row */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
+        /* Chart Wrapper */
+        .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 1rem; }
 
-        .metric-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1rem;
-            text-align: center;
-        }
+        /* Tables (Tab 2 & 3) */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
+        th { background: #0f172a; color: var(--text-sub); padding: 0.75rem 0.5rem; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid var(--border-color); }
+        td { padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+        tr:hover { background: rgba(255,255,255,0.02); }
 
-        .metric-card.highlight {
-            border-color: var(--accent-green);
-            background: linear-gradient(180deg, rgba(16,185,129,0.1) 0%, rgba(30,41,59,1) 100%);
-        }
-
-        .metric-label {
-            font-size: 0.75rem;
-            color: var(--text-sub);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 700;
-        }
-
-        .metric-value {
-            font-size: 1.6rem;
-            font-weight: 800;
-            margin: 0.2rem 0;
-            color: var(--text-main);
-        }
-
-        .metric-card.highlight .metric-value {
-            color: var(--accent-green);
-        }
-
-        .metric-sub {
-            font-size: 0.75rem;
-            color: var(--text-sub);
-        }
-
-        /* Input Controls */
-        .config-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.25rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .config-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-
-        .input-group label {
-            display: block;
-            font-size: 0.8rem;
-            color: var(--text-sub);
-            margin-bottom: 0.4rem;
-            font-weight: 600;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 0.6rem 0.8rem;
-            background: #0f172a;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 600;
-        }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .status-pill {
-            font-size: 0.8rem;
-            padding: 0.25rem 0.6rem;
-            border-radius: 20px;
-            font-weight: 700;
-        }
-
-        .pill-valid { background: rgba(16,185,129,0.2); color: var(--accent-green); }
-        .pill-warn { background: rgba(245,158,11,0.2); color: var(--accent-orange); }
-
-        .charger-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1rem 1.25rem;
-            margin-bottom: 1rem;
-        }
-
-        .charger-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.75rem;
-        }
-
-        .charger-name {
-            font-weight: 700;
-            font-size: 0.95rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .charger-input-wrap {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .charger-input-wrap input {
-            width: 100px;
-            padding: 0.4rem 0.6rem;
-            background: #0f172a;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 700;
-            text-align: right;
-        }
-
-        .unit-label {
-            font-size: 0.85rem;
-            color: var(--text-sub);
-            font-weight: 600;
-        }
-
-        .charger-stats {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            color: var(--text-sub);
-            margin-top: 0.4rem;
-        }
-
-        /* Progress Bar */
-        .progress-bar-wrap {
-            height: 12px;
-            background: #334155;
-            border-radius: 6px;
-            overflow: hidden;
-            display: flex;
-            margin-bottom: 1.5rem;
-        }
-
-        .progress-seg {
-            height: 100%;
-            transition: width 0.2s ease;
-        }
-
-        @media (max-width: 600px) {
-            .config-grid { grid-template-columns: 1fr; }
-            .metrics-grid { grid-template-columns: 1fr 1fr; }
-        }
+        @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <h1>EV Charging Strategy Calculator</h1>
-        <p>Leapmotor B10 Life • Distance-Based Charging Planner</p>
+        <h1>Leapmotor B10 - Charging Log</h1>
+        <p>Track, store, and analyze your monthly charging entries</p>
     </header>
 
-    <!-- Global Parameters -->
-    <div class="config-card">
-        <div class="config-grid">
-            <div class="input-group">
-                <label>Monthly Target Distance (km)</label>
-                <input type="number" id="distance" value="1500" step="50" oninput="calculate()">
+    <!-- Navigation Tabs -->
+    <div class="tabs-nav">
+        <button type="button" class="tab-btn active" data-tab="tab1">1. Log Session</button>
+        <button type="button" class="tab-btn" data-tab="tab2">2. Monthly Summary</button>
+        <button type="button" class="tab-btn" data-tab="tab3">3. Raw Data</button>
+    </div>
+
+    <!-- TAB 1: ENTRY FORM -->
+    <div id="tab1" class="tab-content active" style="display: block;">
+        <div class="card">
+            <div class="card-title">Add New Charging Record</div>
+            <form id="logForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="entryDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Time</label>
+                        <input type="time" id="entryTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Charger Type</label>
+                        <select id="chargerType">
+                            <option value="Home Portable (3.7kW)">Home Portable (3.7kW)</option>
+                            <option value="Home Wallbox (7.0kW)">Home Wallbox (7.0kW)</option>
+                            <option value="Office AC (11kW)">Office AC (11kW)</option>
+                            <option value="DC Fast Charger (100kW+)">DC Fast Charger (100kW+)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Energy Charged (kWh)</label>
+                        <input type="number" id="entryKwh" step="0.01" min="0.1" placeholder="e.g. 25.5" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Rate (RM / kWh)</label>
+                        <input type="number" id="entryRate" step="0.01" value="0.30" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Calculated Total Cost (RM)</label>
+                        <input type="text" id="entryTotal" value="RM 0.00" readonly style="color: var(--accent-green);">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Save Entry</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- TAB 2: MONTHLY SUMMARY & CHART -->
+    <div id="tab2" class="tab-content" style="display: none;">
+        <!-- Graphical Statistics Card -->
+        <div class="card">
+            <div class="summary-header">
+                <div class="card-title">Monthly Charging Statistics</div>
+                <div class="toggle-group">
+                    <button type="button" id="viewCostBtn" class="toggle-btn active">Cost (RM)</button>
+                    <button type="button" id="viewKwhBtn" class="toggle-btn">Energy (kWh)</button>
+                </div>
             </div>
-            <div class="input-group">
-                <label>Car Efficiency (kWh / 100km)</label>
-                <input type="number" id="efficiency" value="14.5" step="0.5" oninput="calculate()">
+            <div class="chart-container">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Monthly Summary Table Card -->
+        <div class="card">
+            <div class="card-title">Monthly Breakdown</div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th id="metricHeader">Total Cost (RM)</th>
+                            <th>Sessions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    <!-- Output Dashboard -->
-    <div class="metrics-grid">
-        <div class="metric-card highlight">
-            <div class="metric-label">Monthly Cost</div>
-            <div class="metric-value" id="totalCost">RM 0.00</div>
-            <div class="metric-sub" id="energyNeeded">Required: 0 kWh</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Allocated Distance</div>
-            <div class="metric-value" id="allocatedDist">0 km</div>
-            <div class="metric-sub" id="targetDistSub">Target: 1,500 km</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Effective Rate</div>
-            <div class="metric-value" id="effectiveRate">RM 0.00</div>
-            <div class="metric-sub">Average per kWh</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Total Plugged-In Time</div>
-            <div class="metric-value" id="totalHours">0 hrs</div>
-            <div class="metric-sub">Across all chargers</div>
+    <!-- TAB 3: RAW DATA TABLE -->
+    <div id="tab3" class="tab-content" style="display: none;">
+        <div class="card">
+            <div class="summary-header">
+                <div class="card-title">All Records</div>
+                <button type="button" id="exportBtn" style="background: var(--border-color); color: #fff; border: none; padding: 0.3rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 700;">Export CSV</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Charger</th>
+                            <th>kWh</th>
+                            <th>Rate</th>
+                            <th>Total</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rawTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-
-    <!-- Visual Breakdown Bar -->
-    <div class="progress-bar-wrap">
-        <div class="progress-seg" id="bar1" style="background: var(--accent-orange); width: 0%;"></div>
-        <div class="progress-seg" id="bar2" style="background: var(--accent-purple); width: 0%;"></div>
-        <div class="progress-seg" id="bar3" style="background: var(--accent-blue); width: 0%;"></div>
-        <div class="progress-seg" id="bar4" style="background: var(--accent-green); width: 0%;"></div>
-    </div>
-
-    <div class="section-title">
-        <span>Monthly kWh Allocation</span>
-        <span id="allocPill" class="status-pill pill-valid">Allocated: 0 / 0 kWh</span>
-    </div>
-
-    <!-- Option 1: 3.7 kW Granny -->
-    <div class="charger-card">
-        <div class="charger-header">
-            <div class="charger-name">
-                <span class="dot" style="background: var(--accent-orange);"></span>
-                1. Home 3.7 kW Granny Charger
-            </div>
-            <div class="charger-input-wrap">
-                <input type="number" id="kwh1" value="35" min="0" step="5" oninput="calculate()">
-                <span class="unit-label">kWh</span>
-            </div>
-        </div>
-        <div class="charger-stats">
-            <span>Rate: RM 0.30 / kWh (TNB Domestic)</span>
-            <span id="stat1">RM 0.00 • 0 hrs (0 km)</span>
-        </div>
-    </div>
-
-    <!-- Option 2: 7.0 kW Wallbox -->
-    <div class="charger-card">
-        <div class="charger-header">
-            <div class="charger-name">
-                <span class="dot" style="background: var(--accent-purple);"></span>
-                2. Home 7.0 kW Wallbox
-            </div>
-            <div class="charger-input-wrap">
-                <input type="number" id="kwh2" value="25" min="0" step="5" oninput="calculate()">
-                <span class="unit-label">kWh</span>
-            </div>
-        </div>
-        <div class="charger-stats">
-            <span>Rate: RM 0.30 / kWh (TNB Domestic)</span>
-            <span id="stat2">RM 0.00 • 0 hrs (0 km)</span>
-        </div>
-    </div>
-
-    <!-- Option 3: 11 kW Office -->
-    <div class="charger-card">
-        <div class="charger-header">
-            <div class="charger-name">
-                <span class="dot" style="background: var(--accent-blue);"></span>
-                3. Office 11 kW AC Charger (Full B10 11kW Speed)
-            </div>
-            <div class="charger-input-wrap">
-                <input type="number" id="kwh3" value="135" min="0" step="5" oninput="calculate()">
-                <span class="unit-label">kWh</span>
-            </div>
-        </div>
-        <div class="charger-stats">
-            <span>Rate: RM 0.28 / kWh</span>
-            <span id="stat3">RM 0.00 • 0 hrs (0 km)</span>
-        </div>
-    </div>
-
-    <!-- Option 4: DC Fast Charging -->
-    <div class="charger-card">
-        <div class="charger-header">
-            <div class="charger-name">
-                <span class="dot" style="background: var(--accent-green);"></span>
-                4. DC Public Fast Charger (100 kW+)
-            </div>
-            <div class="charger-input-wrap">
-                <input type="number" id="kwh4" value="22.5" min="0" step="5" oninput="calculate()">
-                <span class="unit-label">kWh</span>
-            </div>
-        </div>
-        <div class="charger-stats">
-            <span>Rate: RM 1.40 / kWh</span>
-            <span id="stat4">RM 0.00 • 0 hrs (0 km)</span>
-        </div>
-    </div>
-
 </div>
 
 <script>
-    // Hardware charging specs & rates for Leapmotor B10
-    const chargers = [
-        { rate: 0.30, power: 3.7 },   // 1. Portable Granny Charger (3.7 kW)
-        { rate: 0.30, power: 7.0 },   // 2. Home Wallbox (7.0 kW)
-        { rate: 0.28, power: 11.0 },  // 3. Office AC (11.0 kW max B10 OBC capability)
-        { rate: 1.40, power: 100.0 }  // 4. DC Fast Charger (100 kW+)
-    ];
+    const STORAGE_KEY = 'leapmotor_b10_charging_logs';
+    let records = [];
+    let currentSummaryView = 'cost';
+    let monthlyChartInstance = null;
 
-    function calculate() {
-        const targetDist = parseFloat(document.getElementById('distance').value) || 0;
-        const eff = parseFloat(document.getElementById('efficiency').value) || 14.5;
-
-        // Calculate total required kWh for the target distance
-        const reqKWh = eff > 0 ? (targetDist / 100) * eff : 0;
-
-        // Retrieve raw kWh values from inputs
-        const kwhArr = [
-            parseFloat(document.getElementById('kwh1').value) || 0,
-            parseFloat(document.getElementById('kwh2').value) || 0,
-            parseFloat(document.getElementById('kwh3').value) || 0,
-            parseFloat(document.getElementById('kwh4').value) || 0
-        ];
-
-        const totalAllocKWh = kwhArr.reduce((a, b) => a + b, 0);
-
-        // Calculate total cost, hours & allocated distance
-        let totalCost = 0;
-        let totalHours = 0;
-
-        for (let i = 0; i < 4; i++) {
-            const segKWh = kwhArr[i];
-            const segCost = segKWh * chargers[i].rate;
-            const segHours = chargers[i].power > 0 ? (segKWh / chargers[i].power) : 0;
-            const segDist = eff > 0 ? (segKWh / eff) * 100 : 0;
-            const segPct = totalAllocKWh > 0 ? ((segKWh / totalAllocKWh) * 100).toFixed(1) : 0;
-
-            totalCost += segCost;
-            totalHours += segHours;
-
-            // Visual bar segment width
-            document.getElementById(`bar${i+1}`).style.width = `${segPct}%`;
-
-            // Card stats summary line
-            document.getElementById(`stat${i+1}`).innerText = `RM ${segCost.toFixed(2)} • ${segHours.toFixed(1)} hrs (${Math.round(segDist)} km)`;
+    // Helper functions for LocalStorage
+    function loadRecords() {
+        try {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.warn('LocalStorage unavailable, running in-memory.', e);
+            return [];
         }
-
-        const totalAllocDist = eff > 0 ? (totalAllocKWh / eff) * 100 : 0;
-        const avgRate = totalAllocKWh > 0 ? (totalCost / totalAllocKWh) : 0;
-
-        // Update status pill
-        const pill = document.getElementById('allocPill');
-        pill.innerText = `Allocated: ${totalAllocKWh.toFixed(1)} / ${reqKWh.toFixed(1)} kWh`;
-        if (Math.abs(totalAllocKWh - reqKWh) < 0.5) {
-            pill.className = "status-pill pill-valid";
-        } else {
-            pill.className = "status-pill pill-warn";
-        }
-
-        // Render Outputs
-        document.getElementById('totalCost').innerText = `RM ${totalCost.toFixed(2)}`;
-        document.getElementById('energyNeeded').innerText = `Req: ${reqKWh.toFixed(1)} kWh / month`;
-        document.getElementById('allocatedDist').innerText = `${Math.round(totalAllocDist)} km`;
-        document.getElementById('targetDistSub').innerText = `Target: ${Math.round(targetDist)} km`;
-        document.getElementById('effectiveRate').innerText = `RM ${avgRate.toFixed(2)}`;
-        document.getElementById('totalHours').innerText = `${Math.round(totalHours)} hrs`;
     }
 
-    // Initial run on load
-    calculate();
+    function saveRecords() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        } catch (e) {
+            console.warn('LocalStorage save failed.', e);
+        }
+    }
+
+    // Attach Event Listeners on DOM Load
+    document.addEventListener("DOMContentLoaded", () => {
+        records = loadRecords();
+
+        // Defaults
+        const now = new Date();
+        document.getElementById('entryDate').value = now.toISOString().split('T')[0];
+        document.getElementById('entryTime').value = now.toTimeString().slice(0, 5);
+
+        // Tab Switching Logic
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = button.getAttribute('data-tab');
+
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                tabContents.forEach(content => {
+                    if (content.id === targetId) {
+                        content.style.display = 'block';
+                        content.classList.add('active');
+                    } else {
+                        content.style.display = 'none';
+                        content.classList.remove('active');
+                    }
+                });
+
+                if (targetId === 'tab2' || targetId === 'tab3') {
+                    renderAllViews();
+                }
+            });
+        });
+
+        // Form Event Listeners
+        document.getElementById('chargerType').addEventListener('change', autoFillRate);
+        document.getElementById('entryKwh').addEventListener('input', updateTotal);
+        document.getElementById('entryRate').addEventListener('input', updateTotal);
+        document.getElementById('logForm').addEventListener('submit', saveEntry);
+
+        // View Toggle Listeners
+        document.getElementById('viewCostBtn').addEventListener('click', () => setSummaryView('cost'));
+        document.getElementById('viewKwhBtn').addEventListener('click', () => setSummaryView('kwh'));
+
+        // Export Listener
+        document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+        renderAllViews();
+    });
+
+    function autoFillRate() {
+        const type = document.getElementById('chargerType').value;
+        const rateInput = document.getElementById('entryRate');
+        if (type.includes('Home')) rateInput.value = '0.30';
+        else if (type.includes('Office')) rateInput.value = '0.28';
+        else if (type.includes('DC')) rateInput.value = '1.40';
+        updateTotal();
+    }
+
+    function updateTotal() {
+        const kwh = parseFloat(document.getElementById('entryKwh').value) || 0;
+        const rate = parseFloat(document.getElementById('entryRate').value) || 0;
+        document.getElementById('entryTotal').value = `RM ${(kwh * rate).toFixed(2)}`;
+    }
+
+    function saveEntry(e) {
+        e.preventDefault();
+        const kwh = parseFloat(document.getElementById('entryKwh').value) || 0;
+        const rate = parseFloat(document.getElementById('entryRate').value) || 0;
+
+        const newEntry = {
+            id: Date.now(),
+            date: document.getElementById('entryDate').value,
+            time: document.getElementById('entryTime').value,
+            type: document.getElementById('chargerType').value,
+            kwh: kwh,
+            rate: rate,
+            total: kwh * rate
+        };
+
+        records.push(newEntry);
+        saveRecords();
+        alert('Charging record saved successfully!');
+
+        document.getElementById('entryKwh').value = '';
+        updateTotal();
+        renderAllViews();
+    }
+
+    function deleteRecord(id) {
+        if (confirm("Delete this record?")) {
+            records = records.filter(r => r.id !== id);
+            saveRecords();
+            renderAllViews();
+        }
+    }
+
+    function setSummaryView(view) {
+        currentSummaryView = view;
+        document.getElementById('viewCostBtn').classList.toggle('active', view === 'cost');
+        document.getElementById('viewKwhBtn').classList.toggle('active', view === 'kwh');
+        document.getElementById('metricHeader').innerText = view === 'cost' ? 'Total Cost (RM)' : 'Total Energy (kWh)';
+        renderAllViews();
+    }
+
+    function renderAllViews() {
+        renderRawTable();
+        renderSummaryTable();
+        renderChart();
+    }
+
+    // Graphical Chart.js Render Function
+    function renderChart() {
+        const ctx = document.getElementById('monthlyChart').getContext('2d');
+
+        if (!records || records.length === 0) {
+            if (monthlyChartInstance) monthlyChartInstance.destroy();
+            return;
+        }
+
+        // Get sorted unique months (YYYY-MM)
+        const months = [...new Set(records.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
+
+        const chargerTypes = [
+            'Home Portable (3.7kW)',
+            'Home Wallbox (7.0kW)',
+            'Office AC (11kW)',
+            'DC Fast Charger (100kW+)'
+        ];
+
+        const colorMap = {
+            'Home Portable (3.7kW)': '#f59e0b',   // Orange
+            'Home Wallbox (7.0kW)': '#8b5cf6',    // Purple
+            'Office AC (11kW)': '#3b82f6',        // Blue
+            'DC Fast Charger (100kW+)': '#10b981' // Green
+        };
+
+        // Construct stacked datasets per charger type
+        const datasets = chargerTypes.map(type => {
+            const data = months.map(month => {
+                return records
+                    .filter(r => r.date && r.date.substring(0, 7) === month && r.type === type)
+                    .reduce((sum, r) => sum + (currentSummaryView === 'cost' ? (r.total || 0) : (r.kwh || 0)), 0);
+            });
+
+            return {
+                label: type,
+                data: data,
+                backgroundColor: colorMap[type],
+                borderRadius: 4
+            };
+        });
+
+        // Destroy previous instance to prevent visual overlaps
+        if (monthlyChartInstance) {
+            monthlyChartInstance.destroy();
+        }
+
+        monthlyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: months,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) {
+                                    label += currentSummaryView === 'cost' 
+                                        ? 'RM ' + context.parsed.y.toFixed(2) 
+                                        : context.parsed.y.toFixed(2) + ' kWh';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        ticks: { color: '#94a3b8' },
+                        grid: { color: '#334155' }
+                    },
+                    y: {
+                        stacked: true,
+                        ticks: { color: '#94a3b8' },
+                        grid: { color: '#334155' }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderRawTable() {
+        const tbody = document.getElementById('rawTableBody');
+        tbody.innerHTML = '';
+
+        if (!records || records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
+            return;
+        }
+
+        const sorted = [...records].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
+
+        sorted.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.date || ''} ${r.time || ''}</td>
+                <td>${r.type || '-'}</td>
+                <td>${(r.kwh || 0).toFixed(2)} kWh</td>
+                <td>RM ${(r.rate || 0).toFixed(2)}</td>
+                <td style="color: var(--accent-green); font-weight: 700;">RM ${(r.total || 0).toFixed(2)}</td>
+                <td><button type="button" class="btn-danger">Delete</button></td>
+            `;
+            tr.querySelector('.btn-danger').addEventListener('click', () => deleteRecord(r.id));
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderSummaryTable() {
+        const tbody = document.getElementById('summaryTableBody');
+        tbody.innerHTML = '';
+
+        if (!records || records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
+            return;
+        }
+
+        const summary = {};
+        records.forEach(r => {
+            if (!r.date) return;
+            const monthKey = r.date.substring(0, 7);
+            if (!summary[monthKey]) {
+                summary[monthKey] = { cost: 0, kwh: 0, sessions: 0 };
+            }
+            summary[monthKey].cost += (r.total || 0);
+            summary[monthKey].kwh += (r.kwh || 0);
+            summary[monthKey].sessions += 1;
+        });
+
+        const months = Object.keys(summary).sort().reverse();
+        months.forEach(month => {
+            const val = currentSummaryView === 'cost' 
+                ? `RM ${summary[month].cost.toFixed(2)}` 
+                : `${summary[month].kwh.toFixed(2)} kWh`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td style="font-weight: 700;">${month}</td>
+                    <td style="color: var(--accent-green); font-weight: 700;">${val}</td>
+                    <td>${summary[month].sessions} sessions</td>
+                </tr>
+            `;
+        });
+    }
+
+    function exportCSV() {
+        if (!records || records.length === 0) { alert('No data to export.'); return; }
+        let csvContent = "data:text/csv;charset=utf-8,Date,Time,Charger,kWh,Rate (RM/kWh),Total Cost (RM)\n";
+        records.forEach(r => {
+            csvContent += `${r.date},${r.time},"${r.type}",${r.kwh},${r.rate},${(r.total || 0).toFixed(2)}\n`;
+        });
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `B10_Charging_Log_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 </script>
 
 </body>
