@@ -15,6 +15,7 @@
             --accent-blue: #3b82f6;
             --accent-purple: #8b5cf6;
             --accent-orange: #f59e0b;
+            --accent-pink: #ec4899;
             --text-main: #f8fafc;
             --text-sub: #94a3b8;
             --border-color: #334155;
@@ -52,6 +53,9 @@
         .btn:hover { opacity: 0.9; }
         .btn-danger { background: var(--danger-red); font-size: 0.75rem; color: #fff; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; }
 
+        /* Dynamic Fields Toggle Container */
+        .outside-fields { display: none; grid-column: span 2; grid-template-columns: 1fr 1fr; gap: 1rem; background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px dashed var(--border-color); margin-top: 0.25rem; }
+
         /* Tab 2 Controls */
         .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
         .toggle-group { display: flex; background: #0f172a; padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color); }
@@ -59,7 +63,7 @@
         .toggle-btn.active { background: var(--accent-blue); color: #fff; }
 
         /* Chart Wrapper */
-        .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 1rem; }
+        .chart-container { position: relative; height: 340px; width: 100%; margin-bottom: 1rem; }
 
         /* Tables (Tab 2 & 3) */
         .table-wrap { overflow-x: auto; }
@@ -68,7 +72,10 @@
         td { padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
         tr:hover { background: rgba(255,255,255,0.02); }
 
-        @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { 
+            .form-grid { grid-template-columns: 1fr; } 
+            .outside-fields { grid-template-columns: 1fr; grid-column: span 1; }
+        }
     </style>
 </head>
 <body>
@@ -106,9 +113,23 @@
                             <option value="Home Portable (3.7kW)">Home Portable (3.7kW)</option>
                             <option value="Home Wallbox (7.0kW)">Home Wallbox (7.0kW)</option>
                             <option value="Office AC (11kW)">Office AC (11kW)</option>
-                            <option value="DC Fast Charger (100kW+)">DC Fast Charger (100kW+)</option>
+                            <option value="Public AC Charger">Public AC Charger (Outside)</option>
+                            <option value="DC Fast Charger">DC Fast Charger (Outside)</option>
                         </select>
                     </div>
+
+                    <!-- Dynamic Outside Charging Details (CPO Name & Charger Speed) -->
+                    <div id="outsideFields" class="outside-fields">
+                        <div class="form-group">
+                            <label>CPO Provider Name</label>
+                            <input type="text" id="cpoName" placeholder="e.g. Gentari, ChargEV, Shell Recharge">
+                        </div>
+                        <div class="form-group">
+                            <label>Charger Rating (kW)</label>
+                            <input type="number" id="chargerPower" step="1" placeholder="e.g. 11, 22, 100, 180">
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Energy Charged (kWh)</label>
                         <input type="number" id="entryKwh" step="0.01" min="0.1" placeholder="e.g. 25.5" required>
@@ -175,7 +196,8 @@
                     <thead>
                         <tr>
                             <th>Date & Time</th>
-                            <th>Charger</th>
+                            <th>Charger / CPO</th>
+                            <th>Power (kW)</th>
                             <th>kWh</th>
                             <th>Rate</th>
                             <th>Total</th>
@@ -197,7 +219,6 @@
     let currentSummaryView = 'cost';
     let monthlyChartInstance = null;
 
-    // Helper functions for LocalStorage
     function loadRecords() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
@@ -216,11 +237,9 @@
         }
     }
 
-    // Attach Event Listeners on DOM Load
     document.addEventListener("DOMContentLoaded", () => {
         records = loadRecords();
 
-        // Defaults
         const now = new Date();
         document.getElementById('entryDate').value = now.toISOString().split('T')[0];
         document.getElementById('entryTime').value = now.toTimeString().slice(0, 5);
@@ -254,7 +273,7 @@
         });
 
         // Form Event Listeners
-        document.getElementById('chargerType').addEventListener('change', autoFillRate);
+        document.getElementById('chargerType').addEventListener('change', handleChargerTypeChange);
         document.getElementById('entryKwh').addEventListener('input', updateTotal);
         document.getElementById('entryRate').addEventListener('input', updateTotal);
         document.getElementById('logForm').addEventListener('submit', saveEntry);
@@ -266,15 +285,31 @@
         // Export Listener
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
 
+        // Initial setup check
+        handleChargerTypeChange();
         renderAllViews();
     });
 
-    function autoFillRate() {
+    function handleChargerTypeChange() {
         const type = document.getElementById('chargerType').value;
         const rateInput = document.getElementById('entryRate');
-        if (type.includes('Home')) rateInput.value = '0.30';
-        else if (type.includes('Office')) rateInput.value = '0.28';
-        else if (type.includes('DC')) rateInput.value = '1.40';
+        const outsideFields = document.getElementById('outsideFields');
+        const chargerPowerInput = document.getElementById('chargerPower');
+
+        if (type === 'Public AC Charger' || type === 'DC Fast Charger') {
+            outsideFields.style.display = 'grid';
+            if (type === 'Public AC Charger') {
+                rateInput.value = '1.00';
+                chargerPowerInput.value = '22';
+            } else {
+                rateInput.value = '1.40';
+                chargerPowerInput.value = '120';
+            }
+        } else {
+            outsideFields.style.display = 'none';
+            if (type.includes('Home')) rateInput.value = '0.30';
+            else if (type.includes('Office')) rateInput.value = '0.28';
+        }
         updateTotal();
     }
 
@@ -286,14 +321,19 @@
 
     function saveEntry(e) {
         e.preventDefault();
+        const type = document.getElementById('chargerType').value;
         const kwh = parseFloat(document.getElementById('entryKwh').value) || 0;
         const rate = parseFloat(document.getElementById('entryRate').value) || 0;
+        const cpo = document.getElementById('cpoName').value.trim();
+        const power = document.getElementById('chargerPower').value;
 
         const newEntry = {
             id: Date.now(),
             date: document.getElementById('entryDate').value,
             time: document.getElementById('entryTime').value,
-            type: document.getElementById('chargerType').value,
+            type: type,
+            cpo: (type.includes('Public') || type.includes('DC')) ? (cpo || 'Outside') : '-',
+            power: (type.includes('Public') || type.includes('DC')) ? (power ? `${power} kW` : '-') : '-',
             kwh: kwh,
             rate: rate,
             total: kwh * rate
@@ -304,6 +344,7 @@
         alert('Charging record saved successfully!');
 
         document.getElementById('entryKwh').value = '';
+        document.getElementById('cpoName').value = '';
         updateTotal();
         renderAllViews();
     }
@@ -339,24 +380,24 @@
             return;
         }
 
-        // Get sorted unique months (YYYY-MM)
         const months = [...new Set(records.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
 
         const chargerTypes = [
             'Home Portable (3.7kW)',
             'Home Wallbox (7.0kW)',
             'Office AC (11kW)',
-            'DC Fast Charger (100kW+)'
+            'Public AC Charger',
+            'DC Fast Charger'
         ];
 
         const colorMap = {
             'Home Portable (3.7kW)': '#f59e0b',   // Orange
             'Home Wallbox (7.0kW)': '#8b5cf6',    // Purple
             'Office AC (11kW)': '#3b82f6',        // Blue
-            'DC Fast Charger (100kW+)': '#10b981' // Green
+            'Public AC Charger': '#ec4899',       // Pink
+            'DC Fast Charger': '#10b981'          // Green
         };
 
-        // Construct stacked datasets per charger type
         const datasets = chargerTypes.map(type => {
             const data = months.map(month => {
                 return records
@@ -372,7 +413,6 @@
             };
         });
 
-        // Destroy previous instance to prevent visual overlaps
         if (monthlyChartInstance) {
             monthlyChartInstance.destroy();
         }
@@ -426,17 +466,19 @@
         tbody.innerHTML = '';
 
         if (!records || records.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
             return;
         }
 
         const sorted = [...records].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
 
         sorted.forEach(r => {
+            const chargerLabel = (r.cpo && r.cpo !== '-') ? `${r.type} (${r.cpo})` : (r.type || '-');
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${r.date || ''} ${r.time || ''}</td>
-                <td>${r.type || '-'}</td>
+                <td>${chargerLabel}</td>
+                <td>${r.power || '-'}</td>
                 <td>${(r.kwh || 0).toFixed(2)} kWh</td>
                 <td>RM ${(r.rate || 0).toFixed(2)}</td>
                 <td style="color: var(--accent-green); font-weight: 700;">RM ${(r.total || 0).toFixed(2)}</td>
@@ -486,9 +528,9 @@
 
     function exportCSV() {
         if (!records || records.length === 0) { alert('No data to export.'); return; }
-        let csvContent = "data:text/csv;charset=utf-8,Date,Time,Charger,kWh,Rate (RM/kWh),Total Cost (RM)\n";
+        let csvContent = "data:text/csv;charset=utf-8,Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM)\n";
         records.forEach(r => {
-            csvContent += `${r.date},${r.time},"${r.type}",${r.kwh},${r.rate},${(r.total || 0).toFixed(2)}\n`;
+            csvContent += `${r.date},${r.time},"${r.type}","${r.cpo || '-'}","${r.power || '-'}">${r.kwh},${r.rate},${(r.total || 0).toFixed(2)}\n`;
         });
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
