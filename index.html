@@ -41,9 +41,9 @@
 
         /* General Card & Forms */
         .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
-        .card-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main); }
+        .card-title { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
         
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
         .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
         .form-group label { font-size: 0.8rem; color: var(--text-sub); font-weight: 600; }
         .form-group input, .form-group select { background: #0f172a; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.8rem; color: #fff; font-size: 0.95rem; font-weight: 600; outline: none; }
@@ -57,7 +57,8 @@
         .outside-fields { display: none; grid-column: span 2; grid-template-columns: 1fr 1fr; gap: 1rem; background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px dashed var(--border-color); margin-top: 0.25rem; }
 
         /* Tab 2 Controls */
-        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .summary-header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .controls-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .toggle-group { display: flex; background: #0f172a; padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color); }
         .toggle-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 700; border-radius: 6px; cursor: pointer; }
         .toggle-btn.active { background: var(--accent-blue); color: #fff; }
@@ -75,6 +76,7 @@
         @media (max-width: 600px) { 
             .form-grid { grid-template-columns: 1fr; } 
             .outside-fields { grid-template-columns: 1fr; grid-column: span 1; }
+            .summary-header { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
@@ -118,7 +120,7 @@
                         </select>
                     </div>
 
-                    <!-- Dynamic Outside Charging Details (CPO Name & Charger Speed) -->
+                    <!-- Dynamic Outside Charging Details -->
                     <div id="outsideFields" class="outside-fields">
                         <div class="form-group">
                             <label>CPO Provider Name</label>
@@ -153,10 +155,18 @@
         <!-- Graphical Statistics Card -->
         <div class="card">
             <div class="summary-header">
-                <div class="card-title">Monthly Charging Statistics</div>
-                <div class="toggle-group">
-                    <button type="button" id="viewCostBtn" class="toggle-btn active">Cost (RM)</button>
-                    <button type="button" id="viewKwhBtn" class="toggle-btn">Energy (kWh)</button>
+                <div class="card-title">Monthly Statistics</div>
+                <div class="controls-group">
+                    <!-- Metric Switcher -->
+                    <div class="toggle-group">
+                        <button type="button" id="viewCostBtn" class="toggle-btn active">Cost (RM)</button>
+                        <button type="button" id="viewKwhBtn" class="toggle-btn">Energy (kWh)</button>
+                    </div>
+                    <!-- Mode Switcher (Value vs Percentage) -->
+                    <div class="toggle-group">
+                        <button type="button" id="modeValueBtn" class="toggle-btn active">Value</button>
+                        <button type="button" id="modePercentBtn" class="toggle-btn">% Split</button>
+                    </div>
                 </div>
             </div>
             <div class="chart-container">
@@ -166,7 +176,7 @@
 
         <!-- Monthly Summary Table Card -->
         <div class="card">
-            <div class="card-title">Monthly Breakdown</div>
+            <div class="card-title" style="margin-bottom: 1rem;">Monthly Breakdown</div>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -216,7 +226,8 @@
 <script>
     const STORAGE_KEY = 'leapmotor_b10_charging_logs';
     let records = [];
-    let currentSummaryView = 'cost';
+    let currentSummaryView = 'cost'; // 'cost' or 'kwh'
+    let currentDisplayMode = 'value'; // 'value' or 'percent'
     let monthlyChartInstance = null;
 
     function loadRecords() {
@@ -279,13 +290,16 @@
         document.getElementById('logForm').addEventListener('submit', saveEntry);
 
         // View Toggle Listeners
-        document.getElementById('viewCostBtn').addEventListener('click', () => setSummaryView('cost'));
-        document.getElementById('viewKwhBtn').addEventListener('click', () => setSummaryView('kwh'));
+        document.getElementById('viewCostBtn').addEventListener('click', () => setMetricView('cost'));
+        document.getElementById('viewKwhBtn').addEventListener('click', () => setMetricView('kwh'));
+        
+        // Mode Toggle Listeners (% vs Value)
+        document.getElementById('modeValueBtn').addEventListener('click', () => setDisplayMode('value'));
+        document.getElementById('modePercentBtn').addEventListener('click', () => setDisplayMode('percent'));
 
         // Export Listener
         document.getElementById('exportBtn').addEventListener('click', exportCSV);
 
-        // Initial setup check
         handleChargerTypeChange();
         renderAllViews();
     });
@@ -357,12 +371,19 @@
         }
     }
 
-    function setSummaryView(view) {
-        currentSummaryView = view;
-        document.getElementById('viewCostBtn').classList.toggle('active', view === 'cost');
-        document.getElementById('viewKwhBtn').classList.toggle('active', view === 'kwh');
-        document.getElementById('metricHeader').innerText = view === 'cost' ? 'Total Cost (RM)' : 'Total Energy (kWh)';
+    function setMetricView(metric) {
+        currentSummaryView = metric;
+        document.getElementById('viewCostBtn').classList.toggle('active', metric === 'cost');
+        document.getElementById('viewKwhBtn').classList.toggle('active', metric === 'kwh');
+        document.getElementById('metricHeader').innerText = metric === 'cost' ? 'Total Cost (RM)' : 'Total Energy (kWh)';
         renderAllViews();
+    }
+
+    function setDisplayMode(mode) {
+        currentDisplayMode = mode;
+        document.getElementById('modeValueBtn').classList.toggle('active', mode === 'value');
+        document.getElementById('modePercentBtn').classList.toggle('active', mode === 'percent');
+        renderChart();
     }
 
     function renderAllViews() {
@@ -371,7 +392,7 @@
         renderChart();
     }
 
-    // Graphical Chart.js Render Function
+    // Advanced Graphical Chart.js Render Function (Supports Value & % Mode)
     function renderChart() {
         const ctx = document.getElementById('monthlyChart').getContext('2d');
 
@@ -398,16 +419,35 @@
             'DC Fast Charger': '#10b981'          // Green
         };
 
+        // Calculate monthly totals per month for percentage normalization
+        const monthlyTotals = {};
+        months.forEach(month => {
+            monthlyTotals[month] = records
+                .filter(r => r.date && r.date.substring(0, 7) === month)
+                .reduce((sum, r) => sum + (currentSummaryView === 'cost' ? (r.total || 0) : (r.kwh || 0)), 0);
+        });
+
         const datasets = chargerTypes.map(type => {
-            const data = months.map(month => {
-                return records
+            const rawValues = [];
+            const chartData = months.map(month => {
+                const val = records
                     .filter(r => r.date && r.date.substring(0, 7) === month && r.type === type)
                     .reduce((sum, r) => sum + (currentSummaryView === 'cost' ? (r.total || 0) : (r.kwh || 0)), 0);
+                
+                rawValues.push(val);
+
+                if (currentDisplayMode === 'percent') {
+                    const total = monthlyTotals[month] || 0;
+                    return total > 0 ? parseFloat(((val / total) * 100).toFixed(1)) : 0;
+                } else {
+                    return val;
+                }
             });
 
             return {
                 label: type,
-                data: data,
+                data: chartData,
+                rawValues: rawValues, // Store raw values for tooltips in % mode
                 backgroundColor: colorMap[type],
                 borderRadius: 4
             };
@@ -435,10 +475,20 @@
                             label: function(context) {
                                 let label = context.dataset.label || '';
                                 if (label) label += ': ';
-                                if (context.parsed.y !== null) {
-                                    label += currentSummaryView === 'cost' 
-                                        ? 'RM ' + context.parsed.y.toFixed(2) 
-                                        : context.parsed.y.toFixed(2) + ' kWh';
+                                const datasetIndex = context.datasetIndex;
+                                const dataIndex = context.dataIndex;
+                                const rawVal = context.dataset.rawValues[dataIndex];
+
+                                if (currentDisplayMode === 'percent') {
+                                    const pct = context.parsed.y !== null ? context.parsed.y : 0;
+                                    const valStr = currentSummaryView === 'cost' ? `RM ${rawVal.toFixed(2)}` : `${rawVal.toFixed(2)} kWh`;
+                                    label += `${pct.toFixed(1)}% (${valStr})`;
+                                } else {
+                                    if (context.parsed.y !== null) {
+                                        label += currentSummaryView === 'cost' 
+                                            ? 'RM ' + context.parsed.y.toFixed(2) 
+                                            : context.parsed.y.toFixed(2) + ' kWh';
+                                    }
                                 }
                                 return label;
                             }
@@ -453,7 +503,13 @@
                     },
                     y: {
                         stacked: true,
-                        ticks: { color: '#94a3b8' },
+                        max: currentDisplayMode === 'percent' ? 100 : undefined,
+                        ticks: { 
+                            color: '#94a3b8',
+                            callback: function(value) {
+                                return currentDisplayMode === 'percent' ? value + '%' : value;
+                            }
+                        },
                         grid: { color: '#334155' }
                     }
                 }
