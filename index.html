@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leapmotor B10 - Charging Log & Dashboard</title>
+    <title>EV Charging Log & Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Chart.js Library for Graphical Statistics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -84,7 +84,7 @@
 
 <div class="container">
     <header>
-        <h1>Leapmotor B10 - Charging Log</h1>
+        <h1>EV Charging Log</h1>
         <p>Track, store, and analyze your monthly charging entries</p>
     </header>
 
@@ -224,7 +224,7 @@
 </div>
 
 <script>
-    const STORAGE_KEY = 'leapmotor_b10_charging_logs';
+    const STORAGE_KEY = 'ev_charging_logs';
     let records = [];
     let currentSummaryView = 'cost'; // 'cost' or 'kwh'
     let currentDisplayMode = 'value'; // 'value' or 'percent'
@@ -392,7 +392,6 @@
         renderChart();
     }
 
-    // Advanced Graphical Chart.js Render Function (Supports Value & % Mode)
     function renderChart() {
         const ctx = document.getElementById('monthlyChart').getContext('2d');
 
@@ -412,14 +411,13 @@
         ];
 
         const colorMap = {
-            'Home Portable (3.7kW)': '#f59e0b',   // Orange
-            'Home Wallbox (7.0kW)': '#8b5cf6',    // Purple
-            'Office AC (11kW)': '#3b82f6',        // Blue
-            'Public AC Charger': '#ec4899',       // Pink
-            'DC Fast Charger': '#10b981'          // Green
+            'Home Portable (3.7kW)': '#f59e0b',
+            'Home Wallbox (7.0kW)': '#8b5cf6',
+            'Office AC (11kW)': '#3b82f6',
+            'Public AC Charger': '#ec4899',
+            'DC Fast Charger': '#10b981'
         };
 
-        // Calculate monthly totals per month for percentage normalization
         const monthlyTotals = {};
         months.forEach(month => {
             monthlyTotals[month] = records
@@ -447,7 +445,7 @@
             return {
                 label: type,
                 data: chartData,
-                rawValues: rawValues, // Store raw values for tooltips in % mode
+                rawValues: rawValues,
                 backgroundColor: colorMap[type],
                 borderRadius: 4
             };
@@ -586,12 +584,12 @@
         if (!records || records.length === 0) { alert('No data to export.'); return; }
         let csvContent = "data:text/csv;charset=utf-8,Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM)\n";
         records.forEach(r => {
-            csvContent += `${r.date},${r.time},"${r.type}","${r.cpo || '-'}","${r.power || '-'}">${r.kwh},${r.rate},${(r.total || 0).toFixed(2)}\n`;
+            csvContent += `${r.date},${r.time},"${r.type}","${r.cpo || '-'}","${r.power || '-'}",${r.kwh},${r.rate},${(r.total || 0).toFixed(2)}\n`;
         });
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `B10_Charging_Log_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute("download", `EV_Charging_Log_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
