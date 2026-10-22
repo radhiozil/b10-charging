@@ -172,13 +172,6 @@
                     <button type="submit" id="saveBtn" class="btn">Save Entry</button>
                 </form>
             </div>
-
-            <div class="card">
-                <div class="card-title">Import from CSV</div>
-                <p>Upload a CSV exported from the earlier version (columns: Date, Time, Charger Type, CPO, Power, kWh, Rate, Total Cost). Records already in the cloud are skipped, so it is safe to import twice.</p>
-                <input type="file" id="csvFile" accept=".csv,text/csv" class="hidden">
-                <button type="button" id="csvBtn" class="btn">Choose CSV file</button>
-            </div>
         </div>
 
         <!-- TAB 2 -->
@@ -720,102 +713,6 @@
         URL.revokeObjectURL(url);
     }
 
-    /* ---------- CSV import ---------- */
-    function parseCSV(text) {
-        text = text.replace(/^﻿/, '');
-        const rows = [];
-        let row = [], field = '', inQuotes = false;
-        for (let i = 0; i < text.length; i++) {
-            const c = text[i];
-            if (inQuotes) {
-                if (c === '"') {
-                    if (text[i + 1] === '"') { field += '"'; i++; }
-                    else inQuotes = false;
-                } else field += c;
-            } else if (c === '"') inQuotes = true;
-            else if (c === ',') { row.push(field); field = ''; }
-            else if (c === '\n' || c === '\r') {
-                if (c === '\r' && text[i + 1] === '\n') i++;
-                row.push(field); field = '';
-                if (row.some(v => v.trim() !== '')) rows.push(row);
-                row = [];
-            } else field += c;
-        }
-        row.push(field);
-        if (row.some(v => v.trim() !== '')) rows.push(row);
-        return rows;
-    }
-
-    const sigOf = (r) => `${r.date}|${r.time}|${r.type}|${(Number(r.kwh) || 0).toFixed(2)}`;
-
-    async function handleCsvFile(file) {
-        if (!file) return;
-        try {
-            const rows = parseCSV(await file.text());
-            if (rows.length < 2) { toast('CSV looks empty.'); return; }
-            const header = rows[0].map(h => h.trim().toLowerCase());
-            const idx = (name) => header.findIndex(h => h.startsWith(name));
-            const col = {
-                date: idx('date'), time: idx('time'), type: idx('charger'), cpo: idx('cpo'),
-                power: idx('power'), kwh: idx('kwh'), rate: idx('rate'), total: idx('total')
-            };
-            if (col.date < 0 || col.time < 0 || col.type < 0 || col.kwh < 0 || col.rate < 0) {
-                toast('Unrecognised CSV columns. Use the exported file.');
-                return;
-            }
-            const get = (r, i) => i >= 0 && r[i] !== undefined ? r[i].trim() : '';
-
-            const existing = new Set(records.map(sigOf));
-            const parsed = [];
-            let skippedDup = 0, skippedBad = 0;
-            const base = Date.now();
-
-            rows.slice(1).forEach((r, n) => {
-                const date = get(r, col.date);
-                const time = get(r, col.time).slice(0, 5);
-                const kwh = parseFloat(get(r, col.kwh));
-                const rate = parseFloat(get(r, col.rate));
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !(kwh > 0) || isNaN(rate)) {
-                    skippedBad++; return;
-                }
-                let total = parseFloat(get(r, col.total));
-                if (isNaN(total)) total = kwh * rate;
-                const entry = {
-                    id: base + n,
-                    date, time,
-                    type: get(r, col.type),
-                    cpo: get(r, col.cpo) || '-',
-                    power: get(r, col.power) || '-',
-                    kwh, rate, total
-                };
-                const sig = sigOf(entry);
-                if (existing.has(sig)) { skippedDup++; return; }
-                existing.add(sig);
-                parsed.push(entry);
-            });
-
-            if (parsed.length === 0) {
-                toast(`Nothing new to import (${skippedDup} duplicate, ${skippedBad} invalid).`);
-                return;
-            }
-            if (!confirm(`Import ${parsed.length} new record(s)?\n${skippedDup} duplicate(s) and ${skippedBad} invalid row(s) will be skipped.`)) return;
-
-            $('csvBtn').disabled = true;
-            for (let i = 0; i < parsed.length; i += 400) {
-                const batch = writeBatch(db);
-                parsed.slice(i, i + 400).forEach(r => batch.set(doc(logsCol, String(r.id)), r));
-                await batch.commit();
-            }
-            toast(`Imported ${parsed.length} record(s).`);
-        } catch (err) {
-            console.error(err);
-            toast('CSV import failed: ' + (err.code || err.message));
-        } finally {
-            $('csvBtn').disabled = false;
-            $('csvFile').value = '';
-        }
-    }
-
     /* ---------- Init ---------- */
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -843,8 +740,6 @@
     $('modePercentBtn').addEventListener('click', () => setDisplayMode('percent'));
     $('exportBtn').addEventListener('click', exportCSV);
     $('importBtn').addEventListener('click', importLocal);
-    $('csvBtn').addEventListener('click', () => $('csvFile').click());
-    $('csvFile').addEventListener('change', (e) => handleCsvFile(e.target.files[0]));
     $('csvImportBtn').addEventListener('click', importCSV);
 
     handleChargerTypeChange();
