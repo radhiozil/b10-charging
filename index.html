@@ -4,14 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EV Charging Log & Dashboard</title>
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg-color: #0f172a;
             --card-bg: #1e293b;
             --accent-green: #10b981;
             --accent-blue: #3b82f6;
+            --accent-orange: #f59e0b;
             --text-main: #f8fafc;
             --text-sub: #94a3b8;
             --border-color: #334155;
@@ -30,52 +34,75 @@
         .sync-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-sub); margin-right: 4px; }
         .sync-dot.ok { background: var(--accent-green); }
 
-        .tabs-nav { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); overflow-x: auto; }
-        .tab-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.75rem 1.25rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+        .tabs-nav { display: flex; gap: 0.25rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); overflow-x: auto; }
+        .tab-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.75rem 1rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
         .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
         .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
         .card-title { font-size: 1.1rem; font-weight: 700; }
-        .card p { color: var(--text-sub); font-size: 0.85rem; margin-top: 0.4rem; line-height: 1.5; }
+        .card p, .hint { color: var(--text-sub); font-size: 0.85rem; margin-top: 0.4rem; line-height: 1.5; }
 
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
-        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
         .form-group label { font-size: 0.8rem; color: var(--text-sub); font-weight: 600; }
-        .form-group input, .form-group select { background: #0f172a; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.8rem; color: #fff; font-size: 0.95rem; font-weight: 600; outline: none; }
-        .form-group input:focus, .form-group select:focus { border-color: var(--accent-blue); }
+        .form-group input, .form-group select, .filters input, .filters select, .period-select { background: #0f172a; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.8rem; color: #fff; font-size: 0.95rem; font-weight: 600; outline: none; width: 100%; }
+        .form-group input:focus, .form-group select:focus, .filters input:focus, .filters select:focus { border-color: var(--accent-blue); }
 
         .btn { background: var(--accent-blue); color: #fff; border: none; border-radius: 8px; padding: 0.75rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; width: 100%; margin-top: 1rem; }
         .btn:hover { opacity: 0.9; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--border-color); }
         .btn-danger { background: var(--danger-red); font-size: 0.75rem; color: #fff; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; }
+        .btn-edit { background: var(--accent-blue); font-size: 0.75rem; color: #fff; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; margin-right: 0.3rem; }
 
         .outside-fields { display: none; grid-column: span 2; grid-template-columns: 1fr 1fr; gap: 1rem; background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px dashed var(--border-color); margin-top: 0.25rem; }
+        .outside-fields .span2 { grid-column: span 2; }
 
         .summary-header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
         .controls-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .toggle-group { display: flex; background: #0f172a; padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color); }
         .toggle-btn { background: transparent; border: none; color: var(--text-sub); padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 700; border-radius: 6px; cursor: pointer; }
         .toggle-btn.active { background: var(--accent-blue); color: #fff; }
+        .period-select { width: auto; font-size: 0.85rem; padding: 0.45rem 0.7rem; }
+
+        .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+        .tile { background: #0f172a; border: 1px solid var(--border-color); border-radius: 10px; padding: 0.9rem; }
+        .tile .t-label { font-size: 0.72rem; color: var(--text-sub); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+        .tile .t-value { font-size: 1.35rem; font-weight: 800; margin-top: 0.25rem; }
+        .tile .t-sub { font-size: 0.72rem; color: var(--text-sub); margin-top: 0.15rem; }
+        .green { color: var(--accent-green); }
+        .orange { color: var(--accent-orange); }
 
         .chart-container { position: relative; height: 340px; width: 100%; margin-bottom: 1rem; }
 
+        .filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; }
+        .filters input, .filters select { font-size: 0.85rem; padding: 0.5rem 0.7rem; }
+
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
-        th { background: #0f172a; color: var(--text-sub); padding: 0.75rem 0.5rem; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        th { background: #0f172a; color: var(--text-sub); padding: 0.75rem 0.5rem; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid var(--border-color); white-space: nowrap; font-size: 0.75rem; }
         td { padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
         tr:hover { background: rgba(255,255,255,0.02); }
+        .nowrap { white-space: nowrap; }
+        .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 
         .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); background: #0b1220; border: 1px solid var(--border-color); color: #fff; padding: 0.7rem 1.1rem; border-radius: 10px; font-size: 0.85rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; max-width: 90vw; text-align: center; }
         .toast.show { opacity: 1; }
         .error-text { color: var(--danger-red); font-size: 0.85rem; margin-top: 0.75rem; }
         .hidden { display: none !important; }
+        .edit-banner { background: rgba(245,158,11,0.12); border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 0.8rem; font-weight: 700; margin-top: 0.75rem; }
 
         @media (max-width: 600px) {
+            body { padding: 1rem; }
             .form-grid { grid-template-columns: 1fr; }
             .outside-fields { grid-template-columns: 1fr; grid-column: span 1; }
+            .outside-fields .span2 { grid-column: span 1; }
             .summary-header { flex-direction: column; align-items: flex-start; }
+            .tiles { grid-template-columns: repeat(2, 1fr); }
+            .filters { grid-template-columns: 1fr 1fr; }
+            .filters input { grid-column: span 2; }
         }
     </style>
 </head>
@@ -88,13 +115,14 @@
         <div id="userBar" class="user-bar hidden">
             <span><span id="syncDot" class="sync-dot"></span><span id="userEmail"></span></span>
             <button type="button" id="signOutBtn" class="link-btn">Sign out</button>
+            <button type="button" id="installBtn" class="link-btn hidden">Install app</button>
         </div>
     </header>
 
     <!-- SIGN-IN SCREEN -->
     <div id="authScreen" class="card">
         <div class="card-title">Sign in</div>
-        <p>Sign in with your Google account to load and sync your charging records.</p>
+        <p>Sign in with your Google account to load and sync your own charging records. Each account only sees its own data.</p>
         <button type="button" id="signInBtn" class="btn">Sign in with Google</button>
         <div id="authError" class="error-text hidden"></div>
     </div>
@@ -103,12 +131,19 @@
     <div id="appScreen" class="hidden">
         <div class="tabs-nav">
             <button type="button" class="tab-btn active" data-tab="tab1">1. Log Session</button>
-            <button type="button" class="tab-btn" data-tab="tab2">2. Monthly Summary</button>
-            <button type="button" class="tab-btn" data-tab="tab3">3. Raw Data</button>
+            <button type="button" class="tab-btn" data-tab="tab2">2. Dashboard</button>
+            <button type="button" class="tab-btn" data-tab="tab3">3. Records</button>
+            <button type="button" class="tab-btn" data-tab="tab4">4. Settings</button>
         </div>
 
-        <!-- TAB 1 -->
+        <!-- TAB 1: LOG -->
         <div id="tab1" class="tab-content active">
+            <div id="legacyCard" class="card hidden">
+                <div class="card-title">Move your earlier cloud records</div>
+                <p id="legacyText"></p>
+                <button type="button" id="legacyBtn" class="btn">Move to my account</button>
+            </div>
+
             <div id="importCard" class="card hidden">
                 <div class="card-title">Import records from this device</div>
                 <p id="importText"></p>
@@ -116,14 +151,8 @@
             </div>
 
             <div class="card">
-                <div class="card-title">Import from CSV</div>
-                <p>Upload a CSV exported from this app (Raw Data → Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice.</p>
-                <input type="file" id="csvFile" accept=".csv,text/csv" style="margin-top: 0.75rem; color: var(--text-sub); width: 100%;">
-                <button type="button" id="csvImportBtn" class="btn">Import CSV</button>
-            </div>
-
-            <div class="card">
-                <div class="card-title">Add New Charging Record</div>
+                <div class="card-title" id="formTitle">Add New Charging Record</div>
+                <div id="editBanner" class="edit-banner hidden">Editing an existing record. Changes replace the original.</div>
                 <form id="logForm">
                     <div class="form-grid">
                         <div class="form-group">
@@ -134,25 +163,23 @@
                             <label>Time</label>
                             <input type="time" id="entryTime" required>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Charger Type</label>
-                            <select id="chargerType">
-                                <option value="Home Portable (3.7kW)">Home Portable (3.7kW)</option>
-                                <option value="Home Wallbox (7.0kW)">Home Wallbox (7.0kW)</option>
-                                <option value="Office AC (11kW)">Office AC (11kW)</option>
-                                <option value="Public AC Charger">Public AC Charger (Outside)</option>
-                                <option value="DC Fast Charger">DC Fast Charger (Outside)</option>
-                            </select>
+                            <select id="chargerType"></select>
                         </div>
 
                         <div id="outsideFields" class="outside-fields">
-                            <div class="form-group">
-                                <label>CPO Provider Name</label>
-                                <input type="text" id="cpoName" placeholder="e.g. Gentari, ChargEV, Shell Recharge">
+                            <div class="form-group span2">
+                                <label>CPO / Provider</label>
+                                <select id="cpoSelect"></select>
                             </div>
-                            <div class="form-group">
-                                <label>Charger Rating (kW)</label>
-                                <input type="number" id="chargerPower" step="1" placeholder="e.g. 11, 22, 100, 180">
+                            <div class="form-group span2 hidden" id="cpoOtherWrap">
+                                <label>Provider name</label>
+                                <input type="text" id="cpoOther" placeholder="Type the provider name">
+                            </div>
+                            <div class="form-group span2">
+                                <label>Charger Rating (kW), optional</label>
+                                <input type="number" id="chargerPower" step="1" min="1" placeholder="e.g. 11, 22, 60, 120, 180">
                             </div>
                         </div>
 
@@ -162,20 +189,48 @@
                         </div>
                         <div class="form-group">
                             <label>Rate (RM / kWh)</label>
-                            <input type="number" id="entryRate" step="0.01" value="0.30" required>
+                            <input type="number" id="entryRate" step="0.01" min="0" required>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Calculated Total Cost (RM)</label>
                             <input type="text" id="entryTotal" value="RM 0.00" readonly style="color: var(--accent-green);">
                         </div>
                     </div>
                     <button type="submit" id="saveBtn" class="btn">Save Entry</button>
+                    <button type="button" id="cancelEditBtn" class="btn btn-secondary hidden">Cancel edit</button>
                 </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Import from CSV</div>
+                <p>Upload a CSV exported from this app (Records tab, Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice. Provider names are tidied automatically.</p>
+                <input type="file" id="csvFile" accept=".csv,text/csv" style="margin-top: 0.75rem; color: var(--text-sub); width: 100%;">
+                <button type="button" id="csvImportBtn" class="btn">Import CSV</button>
             </div>
         </div>
 
-        <!-- TAB 2 -->
+        <!-- TAB 2: DASHBOARD -->
         <div id="tab2" class="tab-content">
+            <div class="card">
+                <div class="summary-header">
+                    <div class="card-title">Totals</div>
+                    <select id="periodSel" class="period-select"></select>
+                </div>
+                <div class="tiles">
+                    <div class="tile"><div class="t-label">Total spent</div><div class="t-value green" id="tSpent">RM 0.00</div><div class="t-sub" id="tSpentSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Energy</div><div class="t-value" id="tKwh">0 kWh</div><div class="t-sub" id="tKwhSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Avg cost</div><div class="t-value" id="tAvg">RM 0.00</div><div class="t-sub">per kWh</div></div>
+                    <div class="tile"><div class="t-label">Sessions</div><div class="t-value" id="tSessions">0</div><div class="t-sub" id="tSessionsSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Charged at home</div><div class="t-value" id="tHome">0%</div><div class="t-sub">of energy (kWh)</div></div>
+                    <div class="tile"><div class="t-label">Outside spend</div><div class="t-value orange" id="tOutside">0%</div><div class="t-sub">of total cost</div></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Cost comparison</div>
+                <p id="compareText">No records yet.</p>
+            </div>
+
             <div class="card">
                 <div class="summary-header">
                     <div class="card-title">Monthly Statistics</div>
@@ -199,42 +254,72 @@
                 <div class="card-title" style="margin-bottom: 1rem;">Monthly Breakdown</div>
                 <div class="table-wrap">
                     <table>
-                        <thead>
-                            <tr>
-                                <th>Month</th>
-                                <th id="metricHeader">Total Cost (RM)</th>
-                                <th>Sessions</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Month</th><th>Cost</th><th>kWh</th><th>RM/kWh</th><th>Sessions</th></tr></thead>
                         <tbody id="summaryTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 1rem;">By Charger Type <span class="hint" id="periodLabel1"></span></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Type</th><th>Cost</th><th>kWh</th><th>RM/kWh</th><th>Sessions</th></tr></thead>
+                        <tbody id="catTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 1rem;">By Provider (outside charging) <span class="hint" id="periodLabel2"></span></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Provider</th><th>Cost</th><th>kWh</th><th>RM/kWh</th><th>Sessions</th></tr></thead>
+                        <tbody id="cpoTableBody"></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 3 -->
+        <!-- TAB 3: RECORDS -->
         <div id="tab3" class="tab-content">
             <div class="card">
                 <div class="summary-header">
                     <div class="card-title">All Records</div>
                     <button type="button" id="exportBtn" class="link-btn">Export CSV</button>
                 </div>
+                <div class="filters">
+                    <input type="search" id="fSearch" placeholder="Search date, provider, type...">
+                    <select id="fMonth"></select>
+                    <select id="fCat"></select>
+                    <button type="button" id="fClear" class="link-btn">Clear</button>
+                </div>
+                <p id="filterSummary" style="margin: 0 0 0.75rem;"></p>
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>Date & Time</th>
-                                <th>Charger / CPO</th>
-                                <th>Power</th>
-                                <th>kWh</th>
-                                <th>Rate</th>
-                                <th>Total</th>
-                                <th>Action</th>
+                                <th>Date & Time</th><th>Charger</th><th>Provider</th><th>Power</th><th>kWh</th><th>Rate</th><th>Total</th><th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="rawTableBody"></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: SETTINGS -->
+        <div id="tab4" class="tab-content">
+            <div class="card">
+                <div class="card-title">Default rates (RM / kWh)</div>
+                <p>These fill in the Rate field when you pick a charger type. You can still change the rate on each entry.</p>
+                <div class="form-grid" id="ratesGrid"></div>
+                <button type="button" id="saveRatesBtn" class="btn">Save rates</button>
+                <button type="button" id="resetRatesBtn" class="btn btn-secondary">Reset to defaults</button>
+            </div>
+            <div class="card">
+                <div class="card-title">About</div>
+                <p>Your records live in your own Google-signed account and are not visible to other users. Use Export CSV on the Records tab for a backup.</p>
             </div>
         </div>
     </div>
@@ -247,7 +332,7 @@
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
         from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-             collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch }
+             collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs }
         from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -269,20 +354,74 @@
     } catch (e) {
         db = initializeFirestore(app, {});
     }
-    const logsCol = collection(db, 'charging_logs');
-    const LOCAL_KEY = 'ev_charging_logs';
 
+    const LOCAL_KEY = 'ev_charging_logs';
+    const LEGACY_COLLECTION = 'charging_logs';
+
+    /* ---------- Config ---------- */
+    // key = value stored in records (kept the same as earlier versions)
+    const CATS = [
+        { id: 'granny', key: 'Home Portable (3.7kW)', label: 'Granny Charger (Home)', color: '#f59e0b', kind: 'home',    rate: 0.30 },
+        { id: 'home',   key: 'Home Wallbox (7.0kW)',  label: 'AC Home',               color: '#8b5cf6', kind: 'home',    rate: 0.30 },
+        { id: 'office', key: 'Office AC (11kW)',      label: 'AC Office (JomCharge)', color: '#3b82f6', kind: 'office',  rate: 0.28 },
+        { id: 'acout',  key: 'Public AC Charger',     label: 'AC Outside',            color: '#ec4899', kind: 'outside', rate: 1.00 },
+        { id: 'dcout',  key: 'DC Fast Charger',       label: 'DC Outside',            color: '#10b981', kind: 'outside', rate: 1.40 }
+    ];
+    const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
+    const OFFICE_CPO = 'JomCharge';
+
+    // Provider names compiled from public sources (the MGTC list is inside a Power BI report).
+    // Add or remove names here; "Other" in the form lets you type any name too.
+    const CPO_LIST = [
+        'ChargEV', 'Gentari', 'JomCharge', 'Shell Recharge', 'TNB Electron', 'EVPower', 'Charge Sini',
+        'ChargeHere', 'EV Connection', 'Handal Green Mobility', 'Kineta', 'Green EV Charge',
+        'Charge N Go', 'Pixelbyte (ParkEasy)', 'Tesla Supercharger', 'Mercedes-Benz'
+    ];
+    const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const CPO_ALIAS = {
+        chargeev: 'ChargEV', chargev: 'ChargEV', shell: 'Shell Recharge', tesla: 'Tesla Supercharger',
+        dchandal: 'Handal Green Mobility', handal: 'Handal Green Mobility', parkeasy: 'Pixelbyte (ParkEasy)',
+        pixelbyte: 'Pixelbyte (ParkEasy)', chargesini: 'Charge Sini', evpower: 'EVPower', jomcharge: 'JomCharge'
+    };
+    CPO_LIST.forEach(c => { CPO_ALIAS[normKey(c)] = c; });
+
+    function normalizeCpo(name) {
+        const raw = String(name || '').trim();
+        if (!raw || raw === '-') return '-';
+        const k = normKey(raw);
+        if (k === 'outside' || k === 'unspecified') return 'Unspecified';
+        if (CPO_ALIAS[k]) return CPO_ALIAS[k];
+        for (const a of Object.keys(CPO_ALIAS)) {
+            if (a.length >= 6 && k.startsWith(a)) return CPO_ALIAS[a];
+        }
+        return raw;
+    }
+
+    /* ---------- State ---------- */
     let records = [];
-    let unsubscribe = null;
+    let prefs = { rates: {} };
+    let editingId = null;
+    let legacyDocs = null;
+    let unsubLogs = null, unsubPrefs = null;
     let currentSummaryView = 'cost';
     let currentDisplayMode = 'value';
+    let period = 'all';
     let monthlyChartInstance = null;
+    let deferredInstall = null;
 
     const $ = (id) => document.getElementById(id);
-
-    function escapeHtml(s) {
-        return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
+    const pad = (n) => String(n).padStart(2, '0');
+    const money = (n) => 'RM ' + (Number(n) || 0).toFixed(2);
+    const num = (n, d = 2) => (Number(n) || 0).toFixed(d);
+    const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const rateFor = (cat) => {
+        const v = prefs.rates && prefs.rates[cat.id];
+        return (typeof v === 'number' && !isNaN(v)) ? v : cat.rate;
+    };
+    const catLabel = (type) => (CAT[type] ? CAT[type].label : (type || '-'));
+    const isOutsideType = (type) => !!CAT[type] && CAT[type].kind === 'outside';
+    const sigOf = (r) => `${r.date}|${r.time}|${r.type}|${(Number(r.kwh) || 0).toFixed(2)}`;
+    const agg = (list) => list.reduce((a, r) => { a.cost += (r.total || 0); a.kwh += (r.kwh || 0); a.n++; return a; }, { cost: 0, kwh: 0, n: 0 });
 
     let toastTimer;
     function toast(msg) {
@@ -290,139 +429,21 @@
         t.textContent = msg;
         t.classList.add('show');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+        toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
     }
 
-    /* ---------- Local data (for one-time import) ---------- */
-    function getLocalRecords() {
-        try {
-            const data = localStorage.getItem(LOCAL_KEY);
-            const arr = data ? JSON.parse(data) : [];
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) { return []; }
+    const logsCol = () => collection(db, 'users', auth.currentUser.uid, 'logs');
+    const prefsRef = () => doc(db, 'users', auth.currentUser.uid, 'settings', 'prefs');
+
+    /* ---------- Tabs ---------- */
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    function showTab(id) {
+        tabButtons.forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === id));
+        tabContents.forEach(c => c.classList.toggle('active', c.id === id));
+        renderAllViews();
     }
-
-    function refreshImportCard() {
-        const local = getLocalRecords();
-        const cloudIds = new Set(records.map(r => String(r.id)));
-        const pending = local.filter(r => !cloudIds.has(String(r.id)));
-        if (pending.length > 0) {
-            $('importText').textContent = `Found ${pending.length} record(s) saved only on this device. Import them to your cloud account so they show up everywhere.`;
-            $('importCard').classList.remove('hidden');
-        } else {
-            $('importCard').classList.add('hidden');
-        }
-    }
-
-    async function importLocal() {
-        const local = getLocalRecords();
-        const cloudIds = new Set(records.map(r => String(r.id)));
-        const pending = local.filter(r => r && r.id && !cloudIds.has(String(r.id)));
-        if (pending.length === 0) { toast('Nothing to import.'); return; }
-        $('importBtn').disabled = true;
-        try {
-            for (let i = 0; i < pending.length; i += 400) {
-                const batch = writeBatch(db);
-                pending.slice(i, i + 400).forEach(r => batch.set(doc(logsCol, String(r.id)), r));
-                await batch.commit();
-            }
-            toast(`Imported ${pending.length} record(s).`);
-        } catch (e) {
-            console.error(e);
-            toast('Import failed. Check your connection and sign-in.');
-        } finally {
-            $('importBtn').disabled = false;
-        }
-    }
-
-    /* ---------- CSV import ---------- */
-    function parseCSV(text) {
-        text = text.replace(/^﻿/, '');
-        const rows = [];
-        let row = [], field = '', inQ = false;
-        for (let i = 0; i < text.length; i++) {
-            const c = text[i];
-            if (inQ) {
-                if (c === '"') {
-                    if (text[i + 1] === '"') { field += '"'; i++; }
-                    else inQ = false;
-                } else field += c;
-            } else if (c === '"') inQ = true;
-            else if (c === ',') { row.push(field); field = ''; }
-            else if (c === '\n' || c === '\r') {
-                if (c === '\r' && text[i + 1] === '\n') i++;
-                row.push(field); field = '';
-                if (row.some(f => f.trim() !== '')) rows.push(row);
-                row = [];
-            } else field += c;
-        }
-        row.push(field);
-        if (row.some(f => f.trim() !== '')) rows.push(row);
-        return rows;
-    }
-
-    function recordKey(r) {
-        return [r.date, r.time, r.type, (Number(r.kwh) || 0).toFixed(2)].join('|');
-    }
-
-    function hashId(str) {
-        let h = 5381;
-        for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-        return 'imp_' + h.toString(36);
-    }
-
-    async function importCSV() {
-        const file = $('csvFile').files[0];
-        if (!file) { toast('Choose a CSV file first.'); return; }
-        $('csvImportBtn').disabled = true;
-        try {
-            const rows = parseCSV(await file.text());
-            const body = rows.slice(1); // skip header
-            const existing = new Set(records.map(recordKey));
-            const seen = new Set();
-            const toAdd = [];
-            let skipped = 0, invalid = 0;
-
-            body.forEach(c => {
-                const date = (c[0] || '').trim();
-                const time = (c[1] || '').trim();
-                const type = (c[2] || '').trim();
-                const kwh = parseFloat(c[5]);
-                const rate = parseFloat(c[6]);
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}/.test(time) || !type || isNaN(kwh) || isNaN(rate)) { invalid++; return; }
-                const totalParsed = parseFloat(c[7]);
-                const r = {
-                    date, time: time.slice(0, 5), type,
-                    cpo: (c[3] || '-').trim() || '-',
-                    power: (c[4] || '-').trim() || '-',
-                    kwh, rate,
-                    total: isNaN(totalParsed) ? kwh * rate : totalParsed
-                };
-                const key = recordKey(r);
-                if (existing.has(key) || seen.has(key)) { skipped++; return; }
-                seen.add(key);
-                r.id = hashId(key);
-                toAdd.push(r);
-            });
-
-            if (toAdd.length === 0) {
-                toast(`Nothing new to import (${skipped} already in cloud, ${invalid} invalid).`);
-                return;
-            }
-            for (let i = 0; i < toAdd.length; i += 400) {
-                const batch = writeBatch(db);
-                toAdd.slice(i, i + 400).forEach(r => batch.set(doc(logsCol, String(r.id)), r));
-                await batch.commit();
-            }
-            $('csvFile').value = '';
-            toast(`Imported ${toAdd.length} record(s). Skipped ${skipped} duplicate(s), ${invalid} invalid.`);
-        } catch (e) {
-            console.error(e);
-            toast('CSV import failed: ' + (e.code || e.message));
-        } finally {
-            $('csvImportBtn').disabled = false;
-        }
-    }
+    tabButtons.forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
 
     /* ---------- Auth ---------- */
     $('signInBtn').addEventListener('click', async () => {
@@ -435,7 +456,6 @@
             $('authError').classList.remove('hidden');
         }
     });
-
     $('signOutBtn').addEventListener('click', () => signOut(auth));
 
     onAuthStateChanged(auth, (user) => {
@@ -446,8 +466,10 @@
             $('userEmail').textContent = user.email;
             startListening();
         } else {
-            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-            records = [];
+            if (unsubLogs) { unsubLogs(); unsubLogs = null; }
+            if (unsubPrefs) { unsubPrefs(); unsubPrefs = null; }
+            records = []; prefs = { rates: {} }; legacyDocs = null;
+            cancelEdit();
             $('authScreen').classList.remove('hidden');
             $('appScreen').classList.add('hidden');
             $('userBar').classList.add('hidden');
@@ -455,76 +477,150 @@
     });
 
     function startListening() {
-        if (unsubscribe) unsubscribe();
-        unsubscribe = onSnapshot(logsCol, (snap) => {
+        if (unsubLogs) unsubLogs();
+        if (unsubPrefs) unsubPrefs();
+        legacyDocs = null;
+        unsubLogs = onSnapshot(logsCol(), (snap) => {
             records = snap.docs.map(d => d.data());
             $('syncDot').classList.add('ok');
+            refreshCpoOptions();
             renderAllViews();
-            refreshImportCard();
+            refreshImportCards();
         }, (err) => {
             console.error(err);
             $('syncDot').classList.remove('ok');
             toast(err.code === 'permission-denied'
-                ? 'Access denied. Sign in with the authorised Google account.'
+                ? 'Access denied. Check the Firestore rules were updated.'
                 : 'Sync error: ' + (err.code || err.message));
         });
+        unsubPrefs = onSnapshot(prefsRef(), (snap) => {
+            prefs = snap.exists() && snap.data() ? { rates: {}, ...snap.data() } : { rates: {} };
+            if (!prefs.rates) prefs.rates = {};
+            renderRatesForm();
+            if (!editingId) applyTypeUI(true);
+        }, (err) => console.error(err));
     }
 
     /* ---------- Form ---------- */
-    function isOutside(type) { return type === 'Public AC Charger' || type === 'DC Fast Charger'; }
+    function buildTypeSelect() {
+        $('chargerType').innerHTML = CATS.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+    }
 
-    function handleChargerTypeChange() {
+    function refreshCpoOptions() {
+        const sel = $('cpoSelect');
+        const current = sel.value;
+        const used = new Set();
+        records.filter(r => isOutsideType(r.type)).forEach(r => {
+            const n = normalizeCpo(r.cpo);
+            if (n !== '-' && n !== 'Unspecified') used.add(n);
+        });
+        const extras = [...used].filter(n => !CPO_LIST.includes(n)).sort();
+        const names = [...CPO_LIST].sort((a, b) => a.localeCompare(b));
+        const opt = (n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`;
+        sel.innerHTML = '<option value="">Select provider...</option>' + names.map(opt).join('') +
+            (extras.length ? '<optgroup label="Your other providers">' + extras.map(opt).join('') + '</optgroup>' : '') +
+            '<option value="__other">Other (type name)...</option>';
+        if ([...sel.options].some(o => o.value === current)) sel.value = current;
+        toggleOther();
+    }
+
+    function toggleOther() {
+        $('cpoOtherWrap').classList.toggle('hidden', $('cpoSelect').value !== '__other');
+    }
+
+    // setRate = true when the user picks a type (fill default rate); false when loading a record to edit.
+    function applyTypeUI(setRate) {
         const type = $('chargerType').value;
-        const rateInput = $('entryRate');
-        const outsideFields = $('outsideFields');
-        const chargerPowerInput = $('chargerPower');
-
-        if (isOutside(type)) {
-            outsideFields.style.display = 'grid';
-            if (type === 'Public AC Charger') { rateInput.value = '1.00'; chargerPowerInput.value = '22'; }
-            else { rateInput.value = '1.40'; chargerPowerInput.value = '120'; }
-        } else {
-            outsideFields.style.display = 'none';
-            if (type.includes('Home')) rateInput.value = '0.30';
-            else if (type.includes('Office')) rateInput.value = '0.28';
-        }
+        const cat = CAT[type];
+        $('outsideFields').style.display = (cat && cat.kind === 'outside') ? 'grid' : 'none';
+        if (setRate && cat) $('entryRate').value = rateFor(cat).toFixed(2);
         updateTotal();
     }
 
     function updateTotal() {
         const kwh = parseFloat($('entryKwh').value) || 0;
         const rate = parseFloat($('entryRate').value) || 0;
-        $('entryTotal').value = `RM ${(kwh * rate).toFixed(2)}`;
+        $('entryTotal').value = money(kwh * rate);
+    }
+
+    function resetFormTime() {
+        const now = new Date();
+        $('entryDate').value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        $('entryTime').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    }
+
+    function cancelEdit() {
+        editingId = null;
+        $('formTitle').textContent = 'Add New Charging Record';
+        $('saveBtn').textContent = 'Save Entry';
+        $('editBanner').classList.add('hidden');
+        $('cancelEditBtn').classList.add('hidden');
+        $('entryKwh').value = '';
+        $('cpoSelect').value = '';
+        $('cpoOther').value = '';
+        $('chargerPower').value = '';
+        toggleOther();
+        resetFormTime();
+        applyTypeUI(true);
+    }
+
+    function startEdit(r) {
+        editingId = r.id;
+        showTab('tab1');
+        $('formTitle').textContent = 'Edit Charging Record';
+        $('saveBtn').textContent = 'Update Entry';
+        $('editBanner').classList.remove('hidden');
+        $('cancelEditBtn').classList.remove('hidden');
+        $('entryDate').value = r.date || '';
+        $('entryTime').value = r.time || '';
+        $('chargerType').value = CAT[r.type] ? r.type : CATS[0].key;
+        applyTypeUI(false);
+        $('entryKwh').value = r.kwh;
+        $('entryRate').value = r.rate;
+        const n = normalizeCpo(r.cpo);
+        const sel = $('cpoSelect');
+        if (n === '-' || n === 'Unspecified') { sel.value = ''; $('cpoOther').value = ''; }
+        else if ([...sel.options].some(o => o.value === n)) { sel.value = n; $('cpoOther').value = ''; }
+        else { sel.value = '__other'; $('cpoOther').value = n; }
+        toggleOther();
+        const p = parseFloat(String(r.power || '').replace(/[^0-9.]/g, ''));
+        $('chargerPower').value = isNaN(p) ? '' : p;
+        updateTotal();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     async function saveEntry(e) {
         e.preventDefault();
         const type = $('chargerType').value;
+        const cat = CAT[type];
         const kwh = parseFloat($('entryKwh').value) || 0;
-        const rate = parseFloat($('entryRate').value) || 0;
-        const cpo = $('cpoName').value.trim();
-        const power = $('chargerPower').value;
-        const outside = isOutside(type);
+        const rate = parseFloat($('entryRate').value);
+        if (!(kwh > 0) || isNaN(rate)) { toast('Enter energy (kWh) and rate.'); return; }
+
+        let cpo = '-', power = '-';
+        if (cat.kind === 'outside') {
+            const selVal = $('cpoSelect').value;
+            cpo = selVal === '__other' ? normalizeCpo($('cpoOther').value) : selVal;
+            if (!cpo || cpo === '-') { toast('Choose the provider (or type it under Other).'); return; }
+            const p = $('chargerPower').value;
+            power = p ? `${p} kW` : '-';
+        } else if (cat.kind === 'office') {
+            cpo = OFFICE_CPO;
+        }
 
         const entry = {
-            id: Date.now(),
+            id: editingId !== null ? editingId : Date.now(),
             date: $('entryDate').value,
             time: $('entryTime').value,
-            type: type,
-            cpo: outside ? (cpo || 'Outside') : '-',
-            power: outside ? (power ? `${power} kW` : '-') : '-',
-            kwh: kwh,
-            rate: rate,
+            type, cpo, power, kwh, rate,
             total: kwh * rate
         };
 
         $('saveBtn').disabled = true;
         try {
-            await setDoc(doc(logsCol, String(entry.id)), entry);
-            toast('Charging record saved.');
-            $('entryKwh').value = '';
-            $('cpoName').value = '';
-            updateTotal();
+            await setDoc(doc(logsCol(), String(entry.id)), entry);
+            toast(editingId !== null ? 'Record updated.' : 'Charging record saved.');
+            cancelEdit();
         } catch (err) {
             console.error(err);
             toast('Save failed: ' + (err.code || err.message));
@@ -536,7 +632,8 @@
     async function deleteRecord(id) {
         if (!confirm('Delete this record?')) return;
         try {
-            await deleteDoc(doc(logsCol, String(id)));
+            await deleteDoc(doc(logsCol(), String(id)));
+            if (editingId === id) cancelEdit();
             toast('Record deleted.');
         } catch (err) {
             console.error(err);
@@ -544,64 +641,142 @@
         }
     }
 
-    /* ---------- Views ---------- */
-    function setMetricView(metric) {
-        currentSummaryView = metric;
-        $('viewCostBtn').classList.toggle('active', metric === 'cost');
-        $('viewKwhBtn').classList.toggle('active', metric === 'kwh');
-        $('metricHeader').innerText = metric === 'cost' ? 'Total Cost (RM)' : 'Total Energy (kWh)';
-        renderAllViews();
+    /* ---------- Settings ---------- */
+    function renderRatesForm() {
+        const grid = $('ratesGrid');
+        const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.rate;
+        if (focused) return; // don't overwrite while typing
+        grid.innerHTML = CATS.map(c => `
+            <div class="form-group">
+                <label>${escapeHtml(c.label)}</label>
+                <input type="number" step="0.01" min="0" data-rate="${c.id}" value="${rateFor(c).toFixed(2)}">
+            </div>`).join('');
     }
 
-    function setDisplayMode(mode) {
-        currentDisplayMode = mode;
-        $('modeValueBtn').classList.toggle('active', mode === 'value');
-        $('modePercentBtn').classList.toggle('active', mode === 'percent');
-        renderChart();
+    async function saveRates() {
+        const rates = {};
+        let bad = false;
+        grid_loop: for (const input of $('ratesGrid').querySelectorAll('input[data-rate]')) {
+            const v = parseFloat(input.value);
+            if (isNaN(v) || v < 0) { bad = true; break grid_loop; }
+            rates[input.dataset.rate] = v;
+        }
+        if (bad) { toast('Enter a valid rate for each type.'); return; }
+        try {
+            await setDoc(prefsRef(), { rates }, { merge: true });
+            toast('Rates saved.');
+        } catch (err) {
+            console.error(err);
+            toast('Save failed: ' + (err.code || err.message));
+        }
+    }
+
+    async function resetRates() {
+        if (!confirm('Reset all default rates?')) return;
+        try {
+            await setDoc(prefsRef(), { rates: {} });
+            document.activeElement && document.activeElement.blur();
+            toast('Rates reset.');
+        } catch (err) {
+            console.error(err);
+            toast('Reset failed: ' + (err.code || err.message));
+        }
+    }
+
+    /* ---------- Dashboard ---------- */
+    function monthsList() {
+        return [...new Set(records.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
+    }
+
+    function setViewOptions() {
+        const months = monthsList().reverse();
+        const periodSel = $('periodSel');
+        periodSel.innerHTML = '<option value="all">All time</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
+        if (period !== 'all' && !months.includes(period)) period = 'all';
+        periodSel.value = period;
+
+        const fMonth = $('fMonth');
+        const fm = fMonth.value;
+        fMonth.innerHTML = '<option value="">All months</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
+        if (months.includes(fm)) fMonth.value = fm;
+
+        const fCat = $('fCat');
+        const fc = fCat.value;
+        fCat.innerHTML = '<option value="">All types</option>' + CATS.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+        if (CAT[fc]) fCat.value = fc;
     }
 
     function renderAllViews() {
-        renderRawTable();
-        renderSummaryTable();
+        setViewOptions();
+        renderTiles();
         renderChart();
+        renderSummaryTable();
+        renderCatTable();
+        renderCpoTable();
+        renderRawTable();
+    }
+
+    function periodRecords() {
+        return period === 'all' ? records : records.filter(r => r.date && r.date.substring(0, 7) === period);
+    }
+
+    function renderTiles() {
+        const list = periodRecords();
+        const t = agg(list);
+        const home = agg(list.filter(r => CAT[r.type] && CAT[r.type].kind === 'home'));
+        const outside = agg(list.filter(r => isOutsideType(r.type)));
+        $('tSpent').textContent = money(t.cost);
+        $('tKwh').textContent = `${num(t.kwh, 1)} kWh`;
+        $('tAvg').textContent = money(t.kwh > 0 ? t.cost / t.kwh : 0);
+        $('tSessions').textContent = String(t.n);
+        $('tHome').textContent = t.kwh > 0 ? `${(home.kwh / t.kwh * 100).toFixed(0)}%` : '0%';
+        $('tOutside').textContent = t.cost > 0 ? `${(outside.cost / t.cost * 100).toFixed(0)}%` : '0%';
+        $('tSpentSub').textContent = period === 'all' ? 'all time' : period;
+        $('tKwhSub').textContent = t.n ? `${num(t.kwh / t.n, 1)} kWh / session` : ' ';
+        $('tSessionsSub').textContent = t.n ? `${money(t.cost / t.n)} / session` : ' ';
+        $('periodLabel1').textContent = period === 'all' ? '(all time)' : `(${period})`;
+        $('periodLabel2').textContent = $('periodLabel1').textContent;
+
+        // Cost comparison: same energy, if it had all been bought at the DC rate
+        const el = $('compareText');
+        if (!t.n) { el.textContent = 'No records for this period.'; return; }
+        const dc = agg(list.filter(r => r.type === 'DC Fast Charger'));
+        const dcCat = CAT['DC Fast Charger'];
+        const ref = dc.kwh > 0 ? dc.cost / dc.kwh : rateFor(dcCat);
+        const refSource = dc.kwh > 0 ? 'your average DC rate' : 'your default DC rate';
+        const hypo = t.kwh * ref;
+        const saved = hypo - t.cost;
+        const pct = hypo > 0 ? saved / hypo * 100 : 0;
+        el.innerHTML = `Buying all ${num(t.kwh, 1)} kWh at ${refSource} (RM ${ref.toFixed(2)}/kWh) would have cost <b>${money(hypo)}</b>. ` +
+            `You paid <b>${money(t.cost)}</b>, so you saved <b class="green">${money(saved)}</b> (${pct.toFixed(0)}%) by charging at home and the office.`;
     }
 
     function renderChart() {
         const canvas = $('monthlyChart');
-        if (!canvas || canvas.offsetParent === null) return; // hidden tab; render when shown
+        if (!canvas || canvas.offsetParent === null || typeof Chart === 'undefined') return;
         const ctx = canvas.getContext('2d');
-
         if (monthlyChartInstance) { monthlyChartInstance.destroy(); monthlyChartInstance = null; }
         if (!records.length) return;
 
-        const months = [...new Set(records.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
-        const chargerTypes = ['Home Portable (3.7kW)', 'Home Wallbox (7.0kW)', 'Office AC (11kW)', 'Public AC Charger', 'DC Fast Charger'];
-        const colorMap = {
-            'Home Portable (3.7kW)': '#f59e0b',
-            'Home Wallbox (7.0kW)': '#8b5cf6',
-            'Office AC (11kW)': '#3b82f6',
-            'Public AC Charger': '#ec4899',
-            'DC Fast Charger': '#10b981'
-        };
+        const months = monthsList();
         const metricOf = (r) => currentSummaryView === 'cost' ? (r.total || 0) : (r.kwh || 0);
-
         const monthlyTotals = {};
         months.forEach(m => {
             monthlyTotals[m] = records.filter(r => r.date && r.date.substring(0, 7) === m).reduce((s, r) => s + metricOf(r), 0);
         });
 
-        const datasets = chargerTypes.map(type => {
+        const datasets = CATS.map(cat => {
             const rawValues = [];
-            const chartData = months.map(m => {
-                const val = records.filter(r => r.date && r.date.substring(0, 7) === m && r.type === type).reduce((s, r) => s + metricOf(r), 0);
+            const data = months.map(m => {
+                const val = records.filter(r => r.date && r.date.substring(0, 7) === m && r.type === cat.key).reduce((s, r) => s + metricOf(r), 0);
                 rawValues.push(val);
                 if (currentDisplayMode === 'percent') {
                     const total = monthlyTotals[m] || 0;
-                    return total > 0 ? parseFloat(((val / total) * 100).toFixed(1)) : 0;
+                    return total > 0 ? parseFloat((val / total * 100).toFixed(1)) : 0;
                 }
                 return val;
             });
-            return { label: type, data: chartData, rawValues, backgroundColor: colorMap[type], borderRadius: 4 };
+            return { label: cat.label, data, rawValues, backgroundColor: cat.color, borderRadius: 4 };
         });
 
         monthlyChartInstance = new Chart(ctx, {
@@ -642,55 +817,97 @@
         });
     }
 
-    function renderRawTable() {
-        const tbody = $('rawTableBody');
-        tbody.innerHTML = '';
-        if (!records.length) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
-            return;
-        }
-        const sorted = [...records].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
-        sorted.forEach(r => {
-            const chargerLabel = (r.cpo && r.cpo !== '-') ? `${r.type} (${r.cpo})` : (r.type || '-');
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${escapeHtml(r.date)} ${escapeHtml(r.time)}</td>
-                <td>${escapeHtml(chargerLabel)}</td>
-                <td>${escapeHtml(r.power || '-')}</td>
-                <td>${(r.kwh || 0).toFixed(2)} kWh</td>
-                <td>RM ${(r.rate || 0).toFixed(2)}</td>
-                <td style="color: var(--accent-green); font-weight: 700;">RM ${(r.total || 0).toFixed(2)}</td>
-                <td><button type="button" class="btn-danger">Delete</button></td>
-            `;
-            tr.querySelector('.btn-danger').addEventListener('click', () => deleteRecord(r.id));
-            tbody.appendChild(tr);
-        });
-    }
+    const emptyRow = (cols) => `<tr><td colspan="${cols}" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
+    const statRow = (name, a) => `
+        <tr>
+            <td style="font-weight: 700;">${name}</td>
+            <td class="green nowrap" style="font-weight: 700;">${money(a.cost)}</td>
+            <td class="nowrap">${num(a.kwh)}</td>
+            <td class="nowrap">${a.kwh > 0 ? num(a.cost / a.kwh) : '-'}</td>
+            <td>${a.n}</td>
+        </tr>`;
 
     function renderSummaryTable() {
         const tbody = $('summaryTableBody');
-        tbody.innerHTML = '';
-        if (!records.length) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color: var(--text-sub);">No records found.</td></tr>`;
-            return;
-        }
-        const summary = {};
-        records.forEach(r => {
-            if (!r.date) return;
-            const key = r.date.substring(0, 7);
-            if (!summary[key]) summary[key] = { cost: 0, kwh: 0, sessions: 0 };
-            summary[key].cost += (r.total || 0);
-            summary[key].kwh += (r.kwh || 0);
-            summary[key].sessions += 1;
+        if (!records.length) { tbody.innerHTML = emptyRow(5); return; }
+        tbody.innerHTML = monthsList().reverse().map(m =>
+            statRow(m, agg(records.filter(r => r.date && r.date.substring(0, 7) === m)))
+        ).join('');
+    }
+
+    function renderCatTable() {
+        const tbody = $('catTableBody');
+        const list = periodRecords();
+        if (!list.length) { tbody.innerHTML = emptyRow(5); return; }
+        tbody.innerHTML = CATS.map(c => {
+            const a = agg(list.filter(r => r.type === c.key));
+            if (!a.n) return '';
+            return statRow(`<span class="swatch" style="background:${c.color}"></span>${escapeHtml(c.label)}`, a);
+        }).join('');
+    }
+
+    function renderCpoTable() {
+        const tbody = $('cpoTableBody');
+        const list = periodRecords().filter(r => isOutsideType(r.type));
+        if (!list.length) { tbody.innerHTML = emptyRow(5); return; }
+        const groups = {};
+        list.forEach(r => {
+            const n = normalizeCpo(r.cpo);
+            const key = (n === '-' ? 'Unspecified' : n);
+            (groups[key] = groups[key] || []).push(r);
         });
-        Object.keys(summary).sort().reverse().forEach(month => {
-            const val = currentSummaryView === 'cost' ? `RM ${summary[month].cost.toFixed(2)}` : `${summary[month].kwh.toFixed(2)} kWh`;
-            tbody.innerHTML += `
-                <tr>
-                    <td style="font-weight: 700;">${month}</td>
-                    <td style="color: var(--accent-green); font-weight: 700;">${val}</td>
-                    <td>${summary[month].sessions} sessions</td>
-                </tr>`;
+        tbody.innerHTML = Object.entries(groups)
+            .map(([name, rs]) => [name, agg(rs)])
+            .sort((a, b) => b[1].cost - a[1].cost)
+            .map(([name, a]) => statRow(escapeHtml(name), a)).join('');
+    }
+
+    /* ---------- Records ---------- */
+    function filteredRecords() {
+        const q = $('fSearch').value.trim().toLowerCase();
+        const m = $('fMonth').value;
+        const c = $('fCat').value;
+        return records.filter(r => {
+            if (m && !(r.date && r.date.substring(0, 7) === m)) return false;
+            if (c && r.type !== c) return false;
+            if (q) {
+                const hay = `${r.date} ${r.time} ${catLabel(r.type)} ${r.type} ${normalizeCpo(r.cpo)} ${r.power || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        });
+    }
+
+    function renderRawTable() {
+        const tbody = $('rawTableBody');
+        tbody.innerHTML = '';
+        const list = filteredRecords();
+        const t = agg(list);
+        $('filterSummary').textContent = records.length
+            ? `${list.length} of ${records.length} records | ${money(t.cost)} | ${num(t.kwh)} kWh`
+            : '';
+        if (!list.length) { tbody.innerHTML = emptyRow(8); return; }
+
+        const sorted = [...list].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
+        sorted.forEach(r => {
+            const cat = CAT[r.type];
+            let cpo = '-';
+            if (cat && cat.kind === 'outside') cpo = normalizeCpo(r.cpo);
+            else if (cat && cat.kind === 'office') cpo = OFFICE_CPO;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="nowrap">${escapeHtml(r.date)} ${escapeHtml(r.time)}</td>
+                <td>${cat ? `<span class="swatch" style="background:${cat.color}"></span>` : ''}${escapeHtml(catLabel(r.type))}</td>
+                <td>${escapeHtml(cpo)}</td>
+                <td class="nowrap">${escapeHtml(r.power || '-')}</td>
+                <td class="nowrap">${num(r.kwh)} kWh</td>
+                <td class="nowrap">RM ${num(r.rate)}</td>
+                <td class="green nowrap" style="font-weight: 700;">${money(r.total)}</td>
+                <td class="nowrap"><button type="button" class="btn-edit">Edit</button><button type="button" class="btn-danger">Delete</button></td>
+            `;
+            tr.querySelector('.btn-edit').addEventListener('click', () => startEdit(r));
+            tr.querySelector('.btn-danger').addEventListener('click', () => deleteRecord(r.id));
+            tbody.appendChild(tr);
         });
     }
 
@@ -698,7 +915,7 @@
         if (!records.length) { toast('No data to export.'); return; }
         const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
         const sorted = [...records].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-        let csv = 'Date,Time,Charger Type,CPO,Power,kWh,Rate (RM/kWh),Total Cost (RM)\n';
+        let csv = 'Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM)\n';
         sorted.forEach(r => {
             csv += [q(r.date), q(r.time), q(r.type), q(r.cpo || '-'), q(r.power || '-'), r.kwh, r.rate, (r.total || 0).toFixed(2)].join(',') + '\n';
         });
@@ -713,36 +930,204 @@
         URL.revokeObjectURL(url);
     }
 
+    /* ---------- Importing / moving data ---------- */
+    async function commitRecords(list) {
+        for (let i = 0; i < list.length; i += 400) {
+            const batch = writeBatch(db);
+            list.slice(i, i + 400).forEach(r => batch.set(doc(logsCol(), String(r.id)), r));
+            await batch.commit();
+        }
+    }
+
+    function getLocalRecords() {
+        try {
+            const data = localStorage.getItem(LOCAL_KEY);
+            const arr = data ? JSON.parse(data) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+
+    function pendingFrom(source) {
+        const have = new Set(records.map(sigOf));
+        return source.filter(r => r && r.id !== undefined && r.date && !have.has(sigOf(r)));
+    }
+
+    async function refreshImportCards() {
+        // records saved only in this browser (very first version of the site)
+        const local = pendingFrom(getLocalRecords());
+        if (local.length) {
+            $('importText').textContent = `Found ${local.length} record(s) saved only on this device. Import them to your account so they show up everywhere.`;
+            $('importCard').classList.remove('hidden');
+        } else {
+            $('importCard').classList.add('hidden');
+        }
+        // records saved in the earlier shared collection (previous version of the site)
+        if (legacyDocs === null) {
+            legacyDocs = [];
+            try {
+                const snap = await getDocs(collection(db, LEGACY_COLLECTION));
+                legacyDocs = snap.docs.map(d => d.data());
+            } catch (e) { legacyDocs = []; } // not allowed for other users; that's expected
+        }
+        const old = pendingFrom(legacyDocs);
+        if (old.length) {
+            $('legacyText').textContent = `Found ${old.length} record(s) from the earlier version of this site. Move them into your own account.`;
+            $('legacyCard').classList.remove('hidden');
+        } else {
+            $('legacyCard').classList.add('hidden');
+        }
+    }
+
+    async function importFrom(source, btnId, label) {
+        const pending = pendingFrom(source);
+        if (!pending.length) { toast('Nothing to import.'); return; }
+        $(btnId).disabled = true;
+        try {
+            await commitRecords(pending);
+            toast(`${label} ${pending.length} record(s).`);
+        } catch (e) {
+            console.error(e);
+            toast('Failed: ' + (e.code || e.message));
+        } finally {
+            $(btnId).disabled = false;
+        }
+    }
+
+    function parseCSV(text) {
+        text = text.replace(/^﻿/, '');
+        const rows = [];
+        let row = [], field = '', inQ = false;
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            if (inQ) {
+                if (c === '"') {
+                    if (text[i + 1] === '"') { field += '"'; i++; }
+                    else inQ = false;
+                } else field += c;
+            } else if (c === '"') inQ = true;
+            else if (c === ',') { row.push(field); field = ''; }
+            else if (c === '\n' || c === '\r') {
+                if (c === '\r' && text[i + 1] === '\n') i++;
+                row.push(field); field = '';
+                if (row.some(f => f.trim() !== '')) rows.push(row);
+                row = [];
+            } else field += c;
+        }
+        row.push(field);
+        if (row.some(f => f.trim() !== '')) rows.push(row);
+        return rows;
+    }
+
+    function hashId(str) {
+        let h = 5381;
+        for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+        return 'imp_' + h.toString(36);
+    }
+
+    async function importCSV() {
+        const file = $('csvFile').files[0];
+        if (!file) { toast('Choose a CSV file first.'); return; }
+        $('csvImportBtn').disabled = true;
+        try {
+            const rows = parseCSV(await file.text());
+            const body = rows.slice(1);
+            const existing = new Set(records.map(sigOf));
+            const seen = new Set();
+            const toAdd = [];
+            let skipped = 0, invalid = 0;
+
+            body.forEach(c => {
+                const date = (c[0] || '').trim();
+                const time = (c[1] || '').trim();
+                const type = (c[2] || '').trim();
+                const kwh = parseFloat(c[5]);
+                const rate = parseFloat(c[6]);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}/.test(time) || !type || isNaN(kwh) || isNaN(rate)) { invalid++; return; }
+                const totalParsed = parseFloat(c[7]);
+                let cpo = (c[3] || '-').trim() || '-';
+                if (isOutsideType(type)) cpo = normalizeCpo(cpo);
+                else if (CAT[type] && CAT[type].kind === 'office') cpo = OFFICE_CPO;
+                const r = {
+                    date, time: time.slice(0, 5), type, cpo,
+                    power: (c[4] || '-').trim() || '-',
+                    kwh, rate,
+                    total: isNaN(totalParsed) ? kwh * rate : totalParsed
+                };
+                const key = sigOf(r);
+                if (existing.has(key) || seen.has(key)) { skipped++; return; }
+                seen.add(key);
+                r.id = hashId(key);
+                toAdd.push(r);
+            });
+
+            if (!toAdd.length) {
+                toast(`Nothing new to import (${skipped} already there, ${invalid} invalid).`);
+                return;
+            }
+            await commitRecords(toAdd);
+            $('csvFile').value = '';
+            toast(`Imported ${toAdd.length} record(s). Skipped ${skipped} duplicate(s), ${invalid} invalid.`);
+        } catch (e) {
+            console.error(e);
+            toast('CSV import failed: ' + (e.code || e.message));
+        } finally {
+            $('csvImportBtn').disabled = false;
+        }
+    }
+
     /* ---------- Init ---------- */
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    $('entryDate').value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    $('entryTime').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    buildTypeSelect();
+    refreshCpoOptions();
+    resetFormTime();
+    applyTypeUI(true);
+    renderRatesForm();
+    setViewOptions();
 
-    const tabButtons = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const targetId = button.getAttribute('data-tab');
-            tabButtons.forEach(b => b.classList.toggle('active', b === button));
-            tabContents.forEach(c => c.classList.toggle('active', c.id === targetId));
-            renderAllViews();
-        });
-    });
-
-    $('chargerType').addEventListener('change', handleChargerTypeChange);
+    $('chargerType').addEventListener('change', () => applyTypeUI(true));
+    $('cpoSelect').addEventListener('change', toggleOther);
     $('entryKwh').addEventListener('input', updateTotal);
     $('entryRate').addEventListener('input', updateTotal);
     $('logForm').addEventListener('submit', saveEntry);
-    $('viewCostBtn').addEventListener('click', () => setMetricView('cost'));
-    $('viewKwhBtn').addEventListener('click', () => setMetricView('kwh'));
-    $('modeValueBtn').addEventListener('click', () => setDisplayMode('value'));
-    $('modePercentBtn').addEventListener('click', () => setDisplayMode('percent'));
-    $('exportBtn').addEventListener('click', exportCSV);
-    $('importBtn').addEventListener('click', importLocal);
-    $('csvImportBtn').addEventListener('click', importCSV);
+    $('cancelEditBtn').addEventListener('click', cancelEdit);
 
-    handleChargerTypeChange();
+    $('viewCostBtn').addEventListener('click', () => { currentSummaryView = 'cost'; $('viewCostBtn').classList.add('active'); $('viewKwhBtn').classList.remove('active'); renderChart(); });
+    $('viewKwhBtn').addEventListener('click', () => { currentSummaryView = 'kwh'; $('viewKwhBtn').classList.add('active'); $('viewCostBtn').classList.remove('active'); renderChart(); });
+    $('modeValueBtn').addEventListener('click', () => { currentDisplayMode = 'value'; $('modeValueBtn').classList.add('active'); $('modePercentBtn').classList.remove('active'); renderChart(); });
+    $('modePercentBtn').addEventListener('click', () => { currentDisplayMode = 'percent'; $('modePercentBtn').classList.add('active'); $('modeValueBtn').classList.remove('active'); renderChart(); });
+    $('periodSel').addEventListener('change', (e) => { period = e.target.value; renderTiles(); renderCatTable(); renderCpoTable(); });
+
+    $('fSearch').addEventListener('input', renderRawTable);
+    $('fMonth').addEventListener('change', renderRawTable);
+    $('fCat').addEventListener('change', renderRawTable);
+    $('fClear').addEventListener('click', () => { $('fSearch').value = ''; $('fMonth').value = ''; $('fCat').value = ''; renderRawTable(); });
+    $('exportBtn').addEventListener('click', exportCSV);
+
+    $('importBtn').addEventListener('click', () => importFrom(getLocalRecords(), 'importBtn', 'Imported'));
+    $('legacyBtn').addEventListener('click', () => importFrom(legacyDocs || [], 'legacyBtn', 'Moved'));
+    $('csvImportBtn').addEventListener('click', importCSV);
+    $('saveRatesBtn').addEventListener('click', saveRates);
+    $('resetRatesBtn').addEventListener('click', resetRates);
+
+    // Installable app (PWA)
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstall = e;
+        $('installBtn').classList.remove('hidden');
+    });
+    $('installBtn').addEventListener('click', async () => {
+        if (!deferredInstall) return;
+        deferredInstall.prompt();
+        try { await deferredInstall.userChoice; } catch (e) {}
+        deferredInstall = null;
+        $('installBtn').classList.add('hidden');
+    });
+    window.addEventListener('appinstalled', () => $('installBtn').classList.add('hidden'));
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW registration failed', e));
+        });
+    }
 </script>
 
 </body>
