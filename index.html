@@ -192,6 +192,20 @@
                             <input type="number" id="entryRate" step="0.01" min="0" required>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>Odometer (km), optional</label>
+                            <input type="number" id="entryOdo" step="1" min="0" inputmode="numeric" placeholder="e.g. 24500">
+                            <div class="hint" id="odoHint" style="margin-top: 0;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Battery before (%), optional</label>
+                            <input type="number" id="entrySocBefore" step="1" min="0" max="100" inputmode="numeric" placeholder="e.g. 20">
+                        </div>
+                        <div class="form-group">
+                            <label>Battery after (%), optional</label>
+                            <input type="number" id="entrySocAfter" step="1" min="0" max="100" inputmode="numeric" placeholder="e.g. 90">
+                        </div>
+                        <div class="hint" id="socHint" style="grid-column: 1 / -1; margin-top: 0;"></div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Calculated Total Cost (RM)</label>
                             <input type="text" id="entryTotal" value="RM 0.00" readonly style="color: var(--accent-green);">
                         </div>
@@ -203,7 +217,7 @@
 
             <div class="card">
                 <div class="card-title">Import from CSV</div>
-                <p>Upload a CSV exported from this app (Records tab, Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice. Provider names are tidied automatically.</p>
+                <p>Upload a CSV exported from this app (Records tab, Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice. If the CSV has Odometer or Battery % columns, those values are added to existing records too. Provider names are tidied automatically.</p>
                 <input type="file" id="csvFile" accept=".csv,text/csv" style="margin-top: 0.75rem; color: var(--text-sub); width: 100%;">
                 <button type="button" id="csvImportBtn" class="btn">Import CSV</button>
             </div>
@@ -229,6 +243,45 @@
             <div class="card">
                 <div class="card-title">Cost comparison</div>
                 <p id="compareText">No records yet.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 1rem;">Efficiency &amp; petrol comparison</div>
+                <div class="tiles">
+                    <div class="tile"><div class="t-label">Distance</div><div class="t-value" id="eKm">-</div><div class="t-sub">from odometer readings</div></div>
+                    <div class="tile"><div class="t-label">Energy use</div><div class="t-value" id="eKwh100">-</div><div class="t-sub">kWh / 100 km</div></div>
+                    <div class="tile"><div class="t-label">Cost per km</div><div class="t-value green" id="eRmKm">-</div><div class="t-sub">charging cost</div></div>
+                    <div class="tile"><div class="t-label">Range per kWh</div><div class="t-value" id="eKmKwh">-</div><div class="t-sub">km / kWh</div></div>
+                    <div class="tile"><div class="t-label">Petrol would cost</div><div class="t-value orange" id="ePetrolCost">-</div><div class="t-sub" id="ePetrolSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">You saved</div><div class="t-value green" id="eSaved">-</div><div class="t-sub" id="eSavedSub">&nbsp;</div></div>
+                </div>
+                <p id="ePetrol"></p>
+                <div class="chart-container" style="height: 220px; margin-top: 1rem;"><canvas id="effChart"></canvas></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Month</th><th>km</th><th>kWh/100km</th><th>RM/km</th><th>Petrol</th><th>Saved</th></tr></thead>
+                        <tbody id="effTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Battery & charging efficiency <span class="hint" id="periodLabel4"></span></div>
+                <div class="tiles" style="margin-top: 0.9rem;">
+                    <div class="tile"><div class="t-label">Avg charge / session</div><div class="t-value" id="bAvg">-</div><div class="t-sub" id="bAvgSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Cost per 10%</div><div class="t-value green" id="bCost10">-</div><div class="t-sub">of battery</div></div>
+                    <div class="tile"><div class="t-label">Charging efficiency</div><div class="t-value" id="bEff">-</div><div class="t-sub" id="bEffSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Energy lost</div><div class="t-value orange" id="bLoss">-</div><div class="t-sub" id="bLossSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Real consumption</div><div class="t-value" id="bReal">-</div><div class="t-sub">kWh/100 km from battery</div></div>
+                    <div class="tile"><div class="t-label">Billed consumption</div><div class="t-value" id="bBilled">-</div><div class="t-sub">kWh/100 km from the wall</div></div>
+                </div>
+                <p id="batteryText"></p>
+                <div class="table-wrap" style="margin-top: 0.75rem;">
+                    <table>
+                        <thead><tr><th>Charger type</th><th>Measured</th><th>Sessions</th><th>Using</th></tr></thead>
+                        <tbody id="effTypeBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="card">
@@ -299,7 +352,7 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Date & Time</th><th>Charger</th><th>Provider</th><th>Power</th><th>kWh</th><th>Rate</th><th>Total</th><th>Action</th>
+                                <th>Date & Time</th><th>Charger</th><th>Provider</th><th>Power</th><th>kWh</th><th>Rate</th><th>Total</th><th>Odometer</th><th>Battery</th><th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="rawTableBody"></tbody>
@@ -316,6 +369,27 @@
                 <div class="form-grid" id="ratesGrid"></div>
                 <button type="button" id="saveRatesBtn" class="btn">Save rates</button>
                 <button type="button" id="resetRatesBtn" class="btn btn-secondary">Reset to defaults</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Petrol comparison</div>
+                <p>Used on the Dashboard to compare your charging cost with a petrol car over the same distance. Update the market price whenever it changes.</p>
+                <div class="form-grid">
+                    <div class="form-group"><label>Petrol car consumption (L / 100 km)</label><input type="number" id="petCons" step="0.1" min="0.1"></div>
+                    <div class="form-group"><label>Subsidised price (RM / L)</label><input type="number" id="petSub" step="0.01" min="0"></div>
+                    <div class="form-group"><label>Subsidy cap (litres / month)</label><input type="number" id="petCap" step="1" min="0"></div>
+                    <div class="form-group"><label>Market price after cap (RM / L)</label><input type="number" id="petMarket" step="0.01" min="0"></div>
+                </div>
+                <button type="button" id="savePetrolBtn" class="btn">Save petrol settings</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Battery & charging efficiency</div>
+                <p>Battery capacity turns battery percentages into kWh. The efficiency for each charger type is used to estimate a missing "before" or "after" %. Start with the typical values, log both percentages for a few sessions per charger type, then tap Use measured averages.</p>
+                <div class="form-grid">
+                    <div class="form-group" style="grid-column: 1 / -1;"><label>Battery capacity (usable kWh)</label><input type="number" id="battCap" step="0.1" min="1"></div>
+                </div>
+                <div class="form-grid" id="effGrid"></div>
+                <button type="button" id="saveBattBtn" class="btn">Save battery settings</button>
+                <button type="button" id="applyMeasuredBtn" class="btn btn-secondary">Use measured averages</button>
             </div>
             <div class="card">
                 <div class="card-title">About</div>
@@ -369,6 +443,10 @@
     ];
     const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
     const OFFICE_CPO = 'JomCharge';
+    // Battery defaults: usable capacity (kWh) and typical charging efficiency (%) per charger type.
+    // Efficiency is replaced by your own measured averages once you log both battery percentages.
+    const BATT_DEFAULT = 56.2;
+    const EFF_DEFAULT = { granny: 85, home: 90, office: 90, acout: 90, dcout: 93 };
 
     // Provider names compiled from public sources (the MGTC list is inside a Power BI report).
     // Add or remove names here; "Other" in the form lets you type any name too.
@@ -485,6 +563,7 @@
             $('syncDot').classList.add('ok');
             refreshCpoOptions();
             renderAllViews();
+            updateOdoHint();
             refreshImportCards();
         }, (err) => {
             console.error(err);
@@ -497,6 +576,7 @@
             prefs = snap.exists() && snap.data() ? { rates: {}, ...snap.data() } : { rates: {} };
             if (!prefs.rates) prefs.rates = {};
             renderRatesForm();
+            renderAllViews();
             if (!editingId) applyTypeUI(true);
         }, (err) => console.error(err));
     }
@@ -559,9 +639,14 @@
         $('cpoSelect').value = '';
         $('cpoOther').value = '';
         $('chargerPower').value = '';
+        $('entryOdo').value = '';
+        $('entrySocBefore').value = '';
+        $('entrySocAfter').value = '';
         toggleOther();
         resetFormTime();
         applyTypeUI(true);
+        updateOdoHint();
+        updateSocHint();
     }
 
     function startEdit(r) {
@@ -577,6 +662,9 @@
         applyTypeUI(false);
         $('entryKwh').value = r.kwh;
         $('entryRate').value = r.rate;
+        $('entryOdo').value = r.odometer || '';
+        $('entrySocBefore').value = numOrNull(r.socBefore) !== null ? r.socBefore : '';
+        $('entrySocAfter').value = numOrNull(r.socAfter) !== null ? r.socAfter : '';
         const n = normalizeCpo(r.cpo);
         const sel = $('cpoSelect');
         if (n === '-' || n === 'Unspecified') { sel.value = ''; $('cpoOther').value = ''; }
@@ -586,6 +674,7 @@
         const p = parseFloat(String(r.power || '').replace(/[^0-9.]/g, ''));
         $('chargerPower').value = isNaN(p) ? '' : p;
         updateTotal();
+        updateSocHint();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -615,6 +704,24 @@
             type, cpo, power, kwh, rate,
             total: kwh * rate
         };
+        const odo = parseFloat($('entryOdo').value);
+        if (odo > 0) {
+            entry.odometer = odo;
+            const prev = previousOdometer(entry);
+            if (prev && odo < Number(prev.odometer) &&
+                !confirm(`This odometer reading is lower than the earlier one (${Number(prev.odometer).toLocaleString()} km on ${prev.date}). Save anyway?`)) return;
+        }
+
+        const sbText = $('entrySocBefore').value.trim(), saText = $('entrySocAfter').value.trim();
+        const sb = sbText === '' ? null : parseFloat(sbText), sa = saText === '' ? null : parseFloat(saText);
+        if ((sb !== null && !(sb >= 0 && sb <= 100)) || (sa !== null && !(sa >= 0 && sa <= 100))) { toast('Battery % must be between 0 and 100.'); return; }
+        if (sb !== null && sa !== null) {
+            if (sa <= sb) { toast('Battery after must be higher than before.'); return; }
+            const eta = (sa - sb) / 100 * battCap() / kwh;
+            if ((eta < 0.6 || eta > 1.05) && !confirm(`These numbers imply ${(eta * 100).toFixed(0)}% charging efficiency, which looks unusual. Save anyway?`)) return;
+        }
+        if (sb !== null) entry.socBefore = sb;
+        if (sa !== null) entry.socAfter = sa;
 
         $('saveBtn').disabled = true;
         try {
@@ -642,10 +749,38 @@
     }
 
     /* ---------- Settings ---------- */
+    function petrolCfg() {
+        const p = prefs.petrol || {};
+        const v = (x, d) => (typeof x === 'number' && !isNaN(x)) ? x : d;
+        return { cons: v(p.cons, 8), sub: v(p.sub, 1.99), cap: v(p.cap, 300), market: v(p.market, 4.32) };
+    }
+
+    function fillPetrolForm() {
+        const c = petrolCfg();
+        $('petCons').value = c.cons;
+        $('petSub').value = c.sub;
+        $('petCap').value = c.cap;
+        $('petMarket').value = c.market;
+    }
+
+    async function savePetrol() {
+        const g = (id) => parseFloat($(id).value);
+        const petrol = { cons: g('petCons'), sub: g('petSub'), cap: g('petCap'), market: g('petMarket') };
+        if (Object.values(petrol).some(v => isNaN(v) || v < 0) || petrol.cons <= 0) { toast('Enter valid petrol settings.'); return; }
+        try {
+            await setDoc(prefsRef(), { petrol }, { merge: true });
+            toast('Petrol settings saved.');
+        } catch (err) {
+            console.error(err);
+            toast('Save failed: ' + (err.code || err.message));
+        }
+    }
+
     function renderRatesForm() {
         const grid = $('ratesGrid');
-        const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.rate;
-        if (focused) return; // don't overwrite while typing
+        if (document.activeElement && document.activeElement.matches && document.activeElement.matches('#tab4 input')) return; // don't overwrite while typing
+        fillPetrolForm();
+        fillBatteryForm();
         grid.innerHTML = CATS.map(c => `
             <div class="form-group">
                 <label>${escapeHtml(c.label)}</label>
@@ -674,13 +809,317 @@
     async function resetRates() {
         if (!confirm('Reset all default rates?')) return;
         try {
-            await setDoc(prefsRef(), { rates: {} });
+            await setDoc(prefsRef(), { rates: {}, petrol: prefs.petrol || {}, battery: prefs.battery || {}, eff: prefs.eff || {} });
             document.activeElement && document.activeElement.blur();
             toast('Rates reset.');
         } catch (err) {
             console.error(err);
             toast('Reset failed: ' + (err.code || err.message));
         }
+    }
+
+    /* ---------- Battery & charging efficiency ---------- */
+    const numOrNull = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+    function battCap() {
+        const c = prefs.battery ? Number(prefs.battery.capacity) : 0;
+        return c > 0 ? c : BATT_DEFAULT;
+    }
+    // efficiency in percent used to estimate a missing before/after value
+    function effUsed(cat) {
+        if (!cat) return 90;
+        const v = prefs.eff ? Number(prefs.eff[cat.id]) : 0;
+        return v > 0 ? v : EFF_DEFAULT[cat.id];
+    }
+    // Battery % before/after for a record. Entered values are kept; a missing one is estimated.
+    function socOf(r) {
+        const b = numOrNull(r.socBefore), a = numOrNull(r.socAfter);
+        if (b !== null && a !== null) return { before: b, after: a, est: null };
+        if (b === null && a === null) return null;
+        const gain = (Number(r.kwh) || 0) * effUsed(CAT[r.type]) / 100 / battCap() * 100;
+        if (a !== null) return { before: Math.max(0, a - gain), after: a, est: 'before' };
+        return { before: b, after: Math.min(100, b + gain), est: 'after' };
+    }
+    // Battery energy gained (kWh) for sessions where both percentages were entered; null if not usable for calibration.
+    function measuredBat(r) {
+        const b = numOrNull(r.socBefore), a = numOrNull(r.socAfter);
+        if (b === null || a === null || a - b < 20 || !(r.kwh > 0)) return null;
+        const bat = (a - b) / 100 * battCap();
+        const eta = bat / r.kwh;
+        return (eta < 0.5 || eta > 1.1) ? null : bat;
+    }
+    function measuredEff() {
+        const out = {};
+        CATS.forEach(c => { out[c.id] = { bat: 0, kwh: 0, n: 0 }; });
+        records.forEach(r => {
+            const cat = CAT[r.type]; if (!cat) return;
+            const bat = measuredBat(r); if (bat === null) return;
+            const o = out[cat.id]; o.bat += bat; o.kwh += r.kwh; o.n++;
+        });
+        return out;
+    }
+    // Real energy used between consecutive odometer readings: sum of (after of a session minus before of the next).
+    function netSegments() {
+        const sorted = chronological();
+        const idx = [];
+        sorted.forEach((r, i) => { if (Number(r.odometer) > 0) idx.push(i); });
+        const cap = battCap();
+        const out = [];
+        for (let k = 1; k < idx.length; k++) {
+            const ia = idx[k - 1], ib = idx[k];
+            const km = Number(sorted[ib].odometer) - Number(sorted[ia].odometer);
+            if (!(km > 0)) continue;
+            let used = 0, ok = true;
+            for (let i = ia; i < ib; i++) {
+                const s1 = socOf(sorted[i]), s2 = socOf(sorted[i + 1]);
+                if (!s1 || !s2) { ok = false; break; }
+                const d = s1.after - s2.before;
+                if (d < -2) { ok = false; break; }
+                used += Math.max(0, d);
+            }
+            if (!ok || !(used > 0)) continue;
+            let billed = 0;
+            for (let i = ia + 1; i <= ib; i++) billed += sorted[i].kwh || 0;
+            out.push({ month: (sorted[ib].date || '').substring(0, 7), km, net: used / 100 * cap, billed });
+        }
+        return out;
+    }
+
+    function updateSocHint() {
+        const el = $('socHint');
+        if (!el) return;
+        const b = numOrNull($('entrySocBefore').value), a = numOrNull($('entrySocAfter').value);
+        const kwh = parseFloat($('entryKwh').value) || 0;
+        const cat = CAT[$('chargerType').value];
+        const cap = battCap(), eta = effUsed(cat);
+        if (b === null && a === null) { el.textContent = 'Optional. Enter just the "after" % and the site estimates the "before" %.'; return; }
+        if (b !== null && a !== null) {
+            if (a <= b) { el.textContent = 'After should be higher than before.'; return; }
+            const bat = (a - b) / 100 * cap;
+            el.textContent = `Battery gained ${(a - b).toFixed(0)}% = ${bat.toFixed(1)} kWh` + (kwh > 0 ? `. Charging efficiency ${(bat / kwh * 100).toFixed(0)}%.` : '.');
+            return;
+        }
+        if (!(kwh > 0)) { el.textContent = 'Enter the kWh charged to estimate the missing percentage.'; return; }
+        const gain = kwh * eta / 100 / cap * 100;
+        el.textContent = a !== null
+            ? `Estimated before: ${Math.max(0, a - gain).toFixed(0)}% (assuming ${eta.toFixed(0)}% efficiency for this charger type).`
+            : `Estimated after: ${Math.min(100, b + gain).toFixed(0)}% (assuming ${eta.toFixed(0)}% efficiency for this charger type).`;
+    }
+
+    function buildEffGrid() {
+        $('effGrid').innerHTML = CATS.map(c => `
+            <div class="form-group">
+                <label>${escapeHtml(c.label)} efficiency (%)</label>
+                <input type="number" step="0.1" min="30" max="100" data-eff="${c.id}">
+                <div class="hint" id="effMeasured_${c.id}" style="margin-top: 0;"></div>
+            </div>`).join('');
+    }
+
+    function fillBatteryForm() {
+        $('battCap').value = battCap();
+        $('effGrid').querySelectorAll('input[data-eff]').forEach(input => {
+            const cat = CATS.find(c => c.id === input.dataset.eff);
+            input.value = effUsed(cat).toFixed(1);
+        });
+    }
+
+    async function saveBattery() {
+        const cap = parseFloat($('battCap').value);
+        if (!(cap > 0)) { toast('Enter a valid battery capacity.'); return; }
+        const eff = {};
+        for (const input of $('effGrid').querySelectorAll('input[data-eff]')) {
+            const v = parseFloat(input.value);
+            if (isNaN(v) || v < 30 || v > 100) { toast('Efficiency must be between 30 and 100%.'); return; }
+            eff[input.dataset.eff] = v;
+        }
+        try {
+            await setDoc(prefsRef(), { battery: { capacity: cap }, eff }, { merge: true });
+            toast('Battery settings saved.');
+        } catch (err) {
+            console.error(err);
+            toast('Save failed: ' + (err.code || err.message));
+        }
+    }
+
+    function applyMeasured() {
+        const meas = measuredEff();
+        let n = 0;
+        CATS.forEach(c => {
+            const m = meas[c.id];
+            if (m.n >= 3) {
+                $('effGrid').querySelector(`[data-eff="${c.id}"]`).value = (m.bat / m.kwh * 100).toFixed(1);
+                n++;
+            }
+        });
+        if (!n) { toast('Need at least 3 measured sessions for a charger type.'); return; }
+        saveBattery();
+    }
+
+    function renderBattery() {
+        const set = (id, v) => { $(id).textContent = v; };
+        const meas = measuredEff();
+        $('periodLabel4').textContent = period === 'all' ? '(all time)' : `(${period})`;
+
+        $('effTypeBody').innerHTML = CATS.map(c => {
+            const m = meas[c.id];
+            return `<tr><td><span class="swatch" style="background:${c.color}"></span>${escapeHtml(c.label)}</td>` +
+                `<td class="nowrap">${m.n ? (m.bat / m.kwh * 100).toFixed(1) + '%' : '-'}</td><td>${m.n}</td>` +
+                `<td class="nowrap">${effUsed(c).toFixed(0)}%</td></tr>`;
+        }).join('');
+        CATS.forEach(c => {
+            const el = $('effMeasured_' + c.id), m = meas[c.id];
+            if (el) el.textContent = m.n ? `Measured ${(m.bat / m.kwh * 100).toFixed(1)}% from ${m.n} session(s)` : 'No measured sessions yet';
+        });
+
+        const list = periodRecords();
+        let sessions = 0, pctSum = 0, costSum = 0, billed = 0, bat = 0, mN = 0;
+        list.forEach(r => {
+            const s = socOf(r);
+            if (s && s.after - s.before > 0) { sessions++; pctSum += s.after - s.before; costSum += r.total || 0; }
+            const mb = measuredBat(r);
+            if (mb !== null) { billed += r.kwh; bat += mb; mN++; }
+        });
+        set('bAvg', sessions ? `${(pctSum / sessions).toFixed(0)}%` : '-');
+        set('bAvgSub', sessions ? `${sessions} session(s) with battery %` : '\u00a0');
+        set('bCost10', pctSum > 0 ? money(costSum / pctSum * 10) : '-');
+        set('bEff', billed > 0 ? `${(bat / billed * 100).toFixed(1)}%` : '-');
+        set('bEffSub', mN ? `${mN} measured session(s)` : 'needs before + after %');
+        set('bLoss', billed > 0 ? `${num(billed - bat, 1)} kWh` : '-');
+        set('bLossSub', billed > 0 ? `${((billed - bat) / billed * 100).toFixed(0)}% of billed energy` : '\u00a0');
+
+        const segs = netSegments().filter(sg => period === 'all' || sg.month === period);
+        const km = segs.reduce((a, x) => a + x.km, 0);
+        set('bReal', km > 0 ? num(segs.reduce((a, x) => a + x.net, 0) / km * 100, 1) : '-');
+        set('bBilled', km > 0 ? num(segs.reduce((a, x) => a + x.billed, 0) / km * 100, 1) : '-');
+
+        const allMeasured = CATS.reduce((a, c) => a + meas[c.id].n, 0);
+        $('batteryText').textContent = allMeasured === 0
+            ? 'No sessions with both before and after percentages yet. Log both for about 3 to 5 sessions per charger type (a change of 20% or more works best), then open Settings and tap Use measured averages.'
+            : `Measured efficiency uses sessions where you entered both percentages and gained at least 20%. Sessions with only one percentage use the "Using" efficiency from Settings. Real consumption needs odometer readings and battery % on the sessions between them.`;
+    }
+
+    /* ---------- Efficiency (odometer) ---------- */
+    let effChartInstance = null;
+
+    function petrolCostFor(km) {
+        const c = petrolCfg();
+        const litres = km * c.cons / 100;
+        const cost = Math.min(litres, c.cap) * c.sub + Math.max(litres - c.cap, 0) * c.market;
+        return { litres, cost };
+    }
+
+    function chronological() {
+        return [...records].sort((a, b) =>
+            `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`) || String(a.id).localeCompare(String(b.id)));
+    }
+
+    // Distance between consecutive odometer readings; energy/cost = everything charged after the earlier reading up to the later one.
+    function effByMonth() {
+        const sorted = chronological();
+        const idx = [];
+        sorted.forEach((r, i) => { if (Number(r.odometer) > 0) idx.push(i); });
+        const byMonth = {};
+        for (let k = 1; k < idx.length; k++) {
+            const ia = idx[k - 1], ib = idx[k];
+            const km = Number(sorted[ib].odometer) - Number(sorted[ia].odometer);
+            if (!(km > 0)) continue;
+            let kwh = 0, cost = 0;
+            for (let i = ia + 1; i <= ib; i++) { kwh += sorted[i].kwh || 0; cost += sorted[i].total || 0; }
+            const m = (sorted[ib].date || '').substring(0, 7);
+            const x = byMonth[m] = byMonth[m] || { km: 0, kwh: 0, cost: 0 };
+            x.km += km; x.kwh += kwh; x.cost += cost;
+        }
+        return byMonth;
+    }
+
+    function previousOdometer(entry) {
+        const key = `${entry.date} ${entry.time}`;
+        const cands = chronological().filter(r => Number(r.odometer) > 0 && String(r.id) !== String(entry.id) && `${r.date} ${r.time}` <= key);
+        return cands.length ? cands[cands.length - 1] : null;
+    }
+
+    function updateOdoHint() {
+        const withOdo = chronological().filter(r => Number(r.odometer) > 0);
+        const el = $('odoHint');
+        if (!withOdo.length) { el.textContent = 'Add it on every charge to see efficiency and petrol savings.'; return; }
+        const l = withOdo[withOdo.length - 1];
+        el.textContent = `Last reading: ${Number(l.odometer).toLocaleString()} km (${l.date})`;
+    }
+
+    function renderEfficiency() {
+        const byM = effByMonth();
+        const months = Object.keys(byM).sort();
+        const sel = period === 'all' ? months : months.filter(m => m === period);
+        const tot = { km: 0, kwh: 0, cost: 0 };
+        let petrolCost = 0, litres = 0;
+        sel.forEach(m => {
+            tot.km += byM[m].km; tot.kwh += byM[m].kwh; tot.cost += byM[m].cost;
+            const p = petrolCostFor(byM[m].km);
+            petrolCost += p.cost; litres += p.litres;
+        });
+
+        const set = (id, v) => { $(id).textContent = v; };
+        if (tot.km > 0 && tot.kwh > 0) {
+            const c = petrolCfg();
+            const saved = petrolCost - tot.cost;
+            set('eKm', `${Math.round(tot.km).toLocaleString()} km`);
+            set('eKwh100', num(tot.kwh / tot.km * 100, 1));
+            set('eRmKm', 'RM ' + num(tot.cost / tot.km, 3));
+            set('eKmKwh', num(tot.km / tot.kwh, 2));
+            set('ePetrolCost', money(petrolCost));
+            set('ePetrolSub', `${num(litres, 0)} L at ${num(c.cons, 1)} L/100 km`);
+            set('eSaved', money(saved));
+            set('eSavedSub', petrolCost > 0 ? `${(saved / petrolCost * 100).toFixed(0)}% cheaper than petrol` : ' ');
+            $('ePetrol').innerHTML = `Over ${Math.round(tot.km).toLocaleString()} km, a petrol car using ${num(c.cons, 1)} L/100 km would burn about ${num(litres, 0)} L. ` +
+                `At RM ${num(c.sub)}/L up to ${c.cap} L each month and RM ${num(c.market)}/L after that, it would cost <b>${money(petrolCost)}</b>. ` +
+                `Charging cost you <b>${money(tot.cost)}</b>, so you saved <b class="green">${money(saved)}</b>. ` +
+                `<span class="hint">Estimate: it assumes the energy you charge between two odometer readings is what the car used.</span>`;
+        } else {
+            ['eKm', 'eKwh100', 'eRmKm', 'eKmKwh', 'ePetrolCost', 'eSaved'].forEach(id => set(id, '-'));
+            set('ePetrolSub', ' '); set('eSavedSub', ' ');
+            $('ePetrol').textContent = 'Add the odometer reading to at least two charging records to see efficiency and petrol savings. Use Edit on older records to add readings.';
+        }
+
+        const tbody = $('effTableBody');
+        if (!months.length) {
+            tbody.innerHTML = emptyRow(6);
+        } else {
+            tbody.innerHTML = [...months].reverse().map(m => {
+                const x = byM[m];
+                const p = petrolCostFor(x.km);
+                return `<tr>
+                    <td style="font-weight: 700;">${m}</td>
+                    <td class="nowrap">${Math.round(x.km).toLocaleString()}</td>
+                    <td class="nowrap">${num(x.kwh / x.km * 100, 1)}</td>
+                    <td class="nowrap">${num(x.cost / x.km, 3)}</td>
+                    <td class="nowrap">${money(p.cost)}</td>
+                    <td class="green nowrap" style="font-weight: 700;">${money(p.cost - x.cost)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        const canvas = $('effChart');
+        if (effChartInstance) { effChartInstance.destroy(); effChartInstance = null; }
+        if (!months.length || !canvas || canvas.offsetParent === null || typeof Chart === 'undefined') return;
+        effChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: months,
+                datasets: [{
+                    label: 'kWh / 100 km',
+                    data: months.map(m => parseFloat((byM[m].kwh / byM[m].km * 100).toFixed(1))),
+                    borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3, pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                }
+            }
+        });
     }
 
     /* ---------- Dashboard ---------- */
@@ -713,6 +1152,9 @@
         renderSummaryTable();
         renderCatTable();
         renderCpoTable();
+        renderEfficiency();
+        renderBattery();
+        updateSocHint();
         renderRawTable();
     }
 
@@ -878,6 +1320,13 @@
         });
     }
 
+    function socCell(r) {
+        const s = socOf(r);
+        if (!s) return '-';
+        return `${s.est === 'before' ? '~' : ''}${s.before.toFixed(0)} &rarr; ${s.est === 'after' ? '~' : ''}${s.after.toFixed(0)}%`;
+    }
+    const socTitle = (r) => { const s = socOf(r); return s && s.est ? 'title="~ means estimated from kWh, capacity and efficiency"' : ''; };
+
     function renderRawTable() {
         const tbody = $('rawTableBody');
         tbody.innerHTML = '';
@@ -886,7 +1335,7 @@
         $('filterSummary').textContent = records.length
             ? `${list.length} of ${records.length} records | ${money(t.cost)} | ${num(t.kwh)} kWh`
             : '';
-        if (!list.length) { tbody.innerHTML = emptyRow(8); return; }
+        if (!list.length) { tbody.innerHTML = emptyRow(10); return; }
 
         const sorted = [...list].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
         sorted.forEach(r => {
@@ -903,6 +1352,8 @@
                 <td class="nowrap">${num(r.kwh)} kWh</td>
                 <td class="nowrap">RM ${num(r.rate)}</td>
                 <td class="green nowrap" style="font-weight: 700;">${money(r.total)}</td>
+                <td class="nowrap">${Number(r.odometer) > 0 ? Number(r.odometer).toLocaleString() + ' km' : '-'}</td>
+                <td class="nowrap" ${socTitle(r)}>${socCell(r)}</td>
                 <td class="nowrap"><button type="button" class="btn-edit">Edit</button><button type="button" class="btn-danger">Delete</button></td>
             `;
             tr.querySelector('.btn-edit').addEventListener('click', () => startEdit(r));
@@ -915,9 +1366,9 @@
         if (!records.length) { toast('No data to export.'); return; }
         const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
         const sorted = [...records].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-        let csv = 'Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM)\n';
+        let csv = 'Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM),Odometer (km),Battery Before (%),Battery After (%)\n';
         sorted.forEach(r => {
-            csv += [q(r.date), q(r.time), q(r.type), q(r.cpo || '-'), q(r.power || '-'), r.kwh, r.rate, (r.total || 0).toFixed(2)].join(',') + '\n';
+            csv += [q(r.date), q(r.time), q(r.type), q(r.cpo || '-'), q(r.power || '-'), r.kwh, r.rate, (r.total || 0).toFixed(2), r.odometer || '', r.socBefore ?? '', r.socAfter ?? ''].join(',') + '\n';
         });
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1031,9 +1482,10 @@
         try {
             const rows = parseCSV(await file.text());
             const body = rows.slice(1);
-            const existing = new Set(records.map(sigOf));
+            const existing = new Map(records.map(r => [sigOf(r), r]));
             const seen = new Set();
             const toAdd = [];
+            const toUpdate = [];
             let skipped = 0, invalid = 0;
 
             body.forEach(c => {
@@ -1053,20 +1505,42 @@
                     kwh, rate,
                     total: isNaN(totalParsed) ? kwh * rate : totalParsed
                 };
+                const odoParsed = parseFloat(c[8]);
+                if (odoParsed > 0) r.odometer = odoParsed;
+                const sbP = parseFloat(c[9]), saP = parseFloat(c[10]);
+                if (!isNaN(sbP) && sbP >= 0 && sbP <= 100) r.socBefore = sbP;
+                if (!isNaN(saP) && saP >= 0 && saP <= 100) r.socAfter = saP;
                 const key = sigOf(r);
-                if (existing.has(key) || seen.has(key)) { skipped++; return; }
+                if (existing.has(key)) {
+                    // already saved: just fill in / correct the odometer reading if the CSV has one
+                    const old = existing.get(key);
+                    const extra = {};
+                    if (r.odometer) extra.odometer = r.odometer;
+                    if (r.socBefore !== undefined) extra.socBefore = r.socBefore;
+                    if (r.socAfter !== undefined) extra.socAfter = r.socAfter;
+                    const changed = Object.entries(extra).filter(([k, v]) => Number(old[k]) !== v);
+                    if (changed.length) toUpdate.push({ id: old.id, fields: Object.fromEntries(changed) });
+                    else skipped++;
+                    return;
+                }
+                if (seen.has(key)) { skipped++; return; }
                 seen.add(key);
                 r.id = hashId(key);
                 toAdd.push(r);
             });
 
-            if (!toAdd.length) {
+            if (!toAdd.length && !toUpdate.length) {
                 toast(`Nothing new to import (${skipped} already there, ${invalid} invalid).`);
                 return;
             }
             await commitRecords(toAdd);
+            for (let i = 0; i < toUpdate.length; i += 400) {
+                const batch = writeBatch(db);
+                toUpdate.slice(i, i + 400).forEach(u => batch.set(doc(logsCol(), String(u.id)), u.fields, { merge: true }));
+                await batch.commit();
+            }
             $('csvFile').value = '';
-            toast(`Imported ${toAdd.length} record(s). Skipped ${skipped} duplicate(s), ${invalid} invalid.`);
+            toast(`Imported ${toAdd.length} new record(s), updated ${toUpdate.length} existing record(s). Skipped ${skipped} duplicate(s), ${invalid} invalid.`);
         } catch (e) {
             console.error(e);
             toast('CSV import failed: ' + (e.code || e.message));
@@ -1077,13 +1551,16 @@
 
     /* ---------- Init ---------- */
     buildTypeSelect();
+    buildEffGrid();
     refreshCpoOptions();
     resetFormTime();
     applyTypeUI(true);
     renderRatesForm();
+    updateOdoHint();
     setViewOptions();
 
-    $('chargerType').addEventListener('change', () => applyTypeUI(true));
+    $('chargerType').addEventListener('change', () => { applyTypeUI(true); updateSocHint(); });
+    ['entryKwh', 'entrySocBefore', 'entrySocAfter'].forEach(id => $(id).addEventListener('input', updateSocHint));
     $('cpoSelect').addEventListener('change', toggleOther);
     $('entryKwh').addEventListener('input', updateTotal);
     $('entryRate').addEventListener('input', updateTotal);
@@ -1094,7 +1571,7 @@
     $('viewKwhBtn').addEventListener('click', () => { currentSummaryView = 'kwh'; $('viewKwhBtn').classList.add('active'); $('viewCostBtn').classList.remove('active'); renderChart(); });
     $('modeValueBtn').addEventListener('click', () => { currentDisplayMode = 'value'; $('modeValueBtn').classList.add('active'); $('modePercentBtn').classList.remove('active'); renderChart(); });
     $('modePercentBtn').addEventListener('click', () => { currentDisplayMode = 'percent'; $('modePercentBtn').classList.add('active'); $('modeValueBtn').classList.remove('active'); renderChart(); });
-    $('periodSel').addEventListener('change', (e) => { period = e.target.value; renderTiles(); renderCatTable(); renderCpoTable(); });
+    $('periodSel').addEventListener('change', (e) => { period = e.target.value; renderTiles(); renderCatTable(); renderCpoTable(); renderEfficiency(); renderBattery(); });
 
     $('fSearch').addEventListener('input', renderRawTable);
     $('fMonth').addEventListener('change', renderRawTable);
@@ -1107,6 +1584,9 @@
     $('csvImportBtn').addEventListener('click', importCSV);
     $('saveRatesBtn').addEventListener('click', saveRates);
     $('resetRatesBtn').addEventListener('click', resetRates);
+    $('savePetrolBtn').addEventListener('click', savePetrol);
+    $('saveBattBtn').addEventListener('click', saveBattery);
+    $('applyMeasuredBtn').addEventListener('click', applyMeasured);
 
     // Installable app (PWA)
     window.addEventListener('beforeinstallprompt', (e) => {
