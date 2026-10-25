@@ -192,6 +192,11 @@
                             <input type="number" id="entryRate" step="0.01" min="0" required>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>Charging finished at (time), optional</label>
+                            <input type="time" id="entryEnd">
+                            <div class="hint" id="splitHint" style="margin-top: 0;"></div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Odometer (km), optional</label>
                             <input type="number" id="entryOdo" step="1" min="0" inputmode="numeric" placeholder="e.g. 24500">
                             <div class="hint" id="odoHint" style="margin-top: 0;"></div>
@@ -217,7 +222,7 @@
 
             <div class="card">
                 <div class="card-title">Import from CSV</div>
-                <p>Upload a CSV exported from this app (Records tab, Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice. If the CSV has Odometer or Battery % columns, those values are added to existing records too. Provider names are tidied automatically.</p>
+                <p>Upload a CSV exported from this app (Records tab, Export CSV). Records already in the cloud are skipped, so it is safe to import the same file twice. If the CSV has Odometer, Battery % or End Time columns, those values are added to existing records too. Provider names are tidied automatically.</p>
                 <input type="file" id="csvFile" accept=".csv,text/csv" style="margin-top: 0.75rem; color: var(--text-sub); width: 100%;">
                 <button type="button" id="csvImportBtn" class="btn">Import CSV</button>
             </div>
@@ -243,6 +248,28 @@
             <div class="card">
                 <div class="card-title">Cost comparison</div>
                 <p id="compareText">No records yet.</p>
+            </div>
+
+            <div class="card">
+                <div class="summary-header">
+                    <div class="card-title">Home usage by TNB bill cycle</div>
+                    <select id="cycleSel" class="period-select"></select>
+                </div>
+                <div class="tiles">
+                    <div class="tile"><div class="t-label">Home usage</div><div class="t-value green" id="cKwh">-</div><div class="t-sub" id="cKwhSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Home cost</div><div class="t-value" id="cCost">-</div><div class="t-sub" id="cCostSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Home sessions</div><div class="t-value" id="cSessions">-</div><div class="t-sub">granny + AC home</div></div>
+                    <div class="tile"><div class="t-label">Daily average</div><div class="t-value" id="cAvg">-</div><div class="t-sub" id="cAvgSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Projected cycle</div><div class="t-value orange" id="cProj">-</div><div class="t-sub" id="cProjSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Home share</div><div class="t-value" id="cShare">-</div><div class="t-sub">of all charging (kWh)</div></div>
+                </div>
+                <p id="cycleText"></p>
+                <div class="table-wrap" style="margin-top: 0.75rem;">
+                    <table>
+                        <thead><tr><th>Bill cycle</th><th>Home kWh</th><th>Home cost</th><th>Sessions</th><th>Share</th></tr></thead>
+                        <tbody id="cycleTableBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="card">
@@ -392,6 +419,15 @@
                 <button type="button" id="applyMeasuredBtn" class="btn btn-secondary">Use measured averages</button>
             </div>
             <div class="card">
+                <div class="card-title">TNB bill cycle & overnight charging</div>
+                <p>Set the day your TNB bill cycle starts (24 means 24th to 23rd of the next month). For overnight charging, the site estimates when a session finished from the kWh and the charger power below, then splits the energy across the days (and bill cycles) it ran through. Use the real power your car draws, which is often lower than the charger rating.</p>
+                <div class="form-grid">
+                    <div class="form-group" style="grid-column: 1 / -1;"><label>Bill cycle starts on day (1 to 28)</label><input type="number" id="billDay" min="1" max="28" step="1"></div>
+                </div>
+                <div class="form-grid" id="powerGrid"></div>
+                <button type="button" id="saveSchedBtn" class="btn">Save bill cycle and power</button>
+            </div>
+            <div class="card">
                 <div class="card-title">About</div>
                 <p>Your records live in your own Google-signed account and are not visible to other users. Use Export CSV on the Records tab for a backup.</p>
             </div>
@@ -447,6 +483,9 @@
     // Efficiency is replaced by your own measured averages once you log both battery percentages.
     const BATT_DEFAULT = 56.2;
     const EFF_DEFAULT = { granny: 85, home: 90, office: 90, acout: 90, dcout: 93 };
+    // Effective charging power (kW) used to estimate when a session finished (home and office chargers).
+    const POWER_DEFAULT = { granny: 3.7, home: 7.0, office: 11 };
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // Provider names compiled from public sources (the MGTC list is inside a Power BI report).
     // Add or remove names here; "Other" in the form lets you type any name too.
@@ -477,6 +516,8 @@
 
     /* ---------- State ---------- */
     let records = [];
+    let slices = [];   // records split by calendar day (overnight sessions), used for time-based totals
+    let cycleChoice = null;
     let prefs = { rates: {} };
     let editingId = null;
     let legacyDocs = null;
@@ -499,7 +540,7 @@
     const catLabel = (type) => (CAT[type] ? CAT[type].label : (type || '-'));
     const isOutsideType = (type) => !!CAT[type] && CAT[type].kind === 'outside';
     const sigOf = (r) => `${r.date}|${r.time}|${r.type}|${(Number(r.kwh) || 0).toFixed(2)}`;
-    const agg = (list) => list.reduce((a, r) => { a.cost += (r.total || 0); a.kwh += (r.kwh || 0); a.n++; return a; }, { cost: 0, kwh: 0, n: 0 });
+    const agg = (list) => list.reduce((a, r) => { a.cost += (r.total || 0); a.kwh += (r.kwh || 0); a.n += (r._n === undefined ? 1 : r._n); return a; }, { cost: 0, kwh: 0, n: 0 });
 
     let toastTimer;
     function toast(msg) {
@@ -642,11 +683,13 @@
         $('entryOdo').value = '';
         $('entrySocBefore').value = '';
         $('entrySocAfter').value = '';
+        $('entryEnd').value = '';
         toggleOther();
         resetFormTime();
         applyTypeUI(true);
         updateOdoHint();
         updateSocHint();
+        updateSplitHint();
     }
 
     function startEdit(r) {
@@ -665,6 +708,7 @@
         $('entryOdo').value = r.odometer || '';
         $('entrySocBefore').value = numOrNull(r.socBefore) !== null ? r.socBefore : '';
         $('entrySocAfter').value = numOrNull(r.socAfter) !== null ? r.socAfter : '';
+        $('entryEnd').value = r.endTime || '';
         const n = normalizeCpo(r.cpo);
         const sel = $('cpoSelect');
         if (n === '-' || n === 'Unspecified') { sel.value = ''; $('cpoOther').value = ''; }
@@ -675,6 +719,7 @@
         $('chargerPower').value = isNaN(p) ? '' : p;
         updateTotal();
         updateSocHint();
+        updateSplitHint();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -722,6 +767,8 @@
         }
         if (sb !== null) entry.socBefore = sb;
         if (sa !== null) entry.socAfter = sa;
+        const endText = $('entryEnd').value.trim();
+        if (endText) entry.endTime = endText;
 
         $('saveBtn').disabled = true;
         try {
@@ -781,6 +828,7 @@
         if (document.activeElement && document.activeElement.matches && document.activeElement.matches('#tab4 input')) return; // don't overwrite while typing
         fillPetrolForm();
         fillBatteryForm();
+        fillScheduleForm();
         grid.innerHTML = CATS.map(c => `
             <div class="form-group">
                 <label>${escapeHtml(c.label)}</label>
@@ -809,12 +857,203 @@
     async function resetRates() {
         if (!confirm('Reset all default rates?')) return;
         try {
-            await setDoc(prefsRef(), { rates: {}, petrol: prefs.petrol || {}, battery: prefs.battery || {}, eff: prefs.eff || {} });
+            await setDoc(prefsRef(), { ...prefs, rates: {} });
             document.activeElement && document.activeElement.blur();
             toast('Rates reset.');
         } catch (err) {
             console.error(err);
             toast('Reset failed: ' + (err.code || err.message));
+        }
+    }
+
+    /* ---------- Overnight sessions and TNB bill cycles ---------- */
+    const dayStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    function billDay() {
+        const d = prefs.bill ? Number(prefs.bill.day) : 0;
+        return d >= 1 && d <= 28 ? Math.floor(d) : 24;
+    }
+    function effPower(cat) {
+        const v = prefs.power ? Number(prefs.power[cat.id]) : 0;
+        return v > 0 ? v : POWER_DEFAULT[cat.id];
+    }
+    // Which charger power to use for timing a session; null = cannot estimate.
+    function powerFor(r) {
+        const cat = CAT[r.type];
+        if (!cat) return null;
+        if (cat.kind === 'home' || cat.kind === 'office') return effPower(cat);
+        if (cat.id === 'acout') { const p = parseFloat(String(r.power || '').replace(/[^0-9.]/g, '')); return p > 0 ? p : null; }
+        return null; // DC fast charging tapers and rarely runs overnight
+    }
+    // Start/end of a session: the entered finish time if there is one, otherwise kWh / charger power.
+    function sessionSpan(r) {
+        if (!(Number(r.kwh) > 0) || !r.date || !r.time) return null;
+        const start = new Date(`${r.date}T${r.time}`);
+        if (isNaN(start)) return null;
+        if (r.endTime && /^\d{2}:\d{2}$/.test(r.endTime)) {
+            let end = new Date(`${r.date}T${r.endTime}`);
+            if (!isNaN(end)) {
+                if (end <= start) end = new Date(end.getTime() + 86400000);
+                return { start, end, source: 'entered' };
+            }
+        }
+        const p = powerFor(r);
+        if (!(p > 0)) return null;
+        return { start, end: new Date(start.getTime() + r.kwh / p * 3600000), source: 'estimated' };
+    }
+    // Split a record into one slice per calendar day it ran through (energy and cost shared by time).
+    function sliceRecord(r) {
+        const span = sessionSpan(r);
+        if (!span || dayStr(span.start) === dayStr(new Date(span.end.getTime() - 1))) return [{ ...r, _n: 1 }];
+        const total = span.end - span.start;
+        const out = [];
+        let cursor = span.start;
+        while (cursor < span.end && out.length < 15) {
+            const next = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+            const segEnd = next < span.end ? next : span.end;
+            const frac = (segEnd - cursor) / total;
+            out.push({ ...r, date: dayStr(cursor), kwh: (r.kwh || 0) * frac, total: (r.total || 0) * frac, _n: out.length === 0 ? 1 : 0 });
+            cursor = segEnd;
+        }
+        return out;
+    }
+    function overnightNote(r) {
+        const span = sessionSpan(r);
+        if (!span || sliceRecord(r).length < 2) return '';
+        const days = Math.round((new Date(dayStr(span.end) + 'T00:00') - new Date(r.date + 'T00:00')) / 86400000);
+        return `<div style="font-size: 0.72rem; color: var(--text-sub); font-weight: 400;">overnight, ends ${span.source === 'entered' ? '' : '~'}${hhmm(span.end)}${days > 0 ? ` (+${days}d)` : ''}</div>`;
+    }
+
+    function updateSplitHint() {
+        const el = $('splitHint');
+        if (!el) return;
+        const type = $('chargerType').value;
+        const pw = $('chargerPower').value;
+        const tmp = {
+            date: $('entryDate').value, time: $('entryTime').value, type,
+            kwh: parseFloat($('entryKwh').value) || 0,
+            power: isOutsideType(type) && pw ? `${pw} kW` : '-',
+            endTime: $('entryEnd').value
+        };
+        const span = sessionSpan(tmp);
+        if (!span) {
+            el.textContent = 'Optional. Leave it blank and the site estimates the finish time from the kWh and charger power, splitting overnight charges across days.';
+            return;
+        }
+        const parts = sliceRecord(tmp);
+        const lead = span.source === 'entered' ? 'Ends' : 'Estimated end';
+        if (parts.length < 2) { el.textContent = `${lead} ${hhmm(span.end)}, the same day.`; return; }
+        el.textContent = `${lead} ${hhmm(span.end)} next day. Energy split: ` +
+            parts.map(p => `${num(p.kwh, 1)} kWh on ${p.date.slice(8)}/${p.date.slice(5, 7)}`).join(', ') + '.';
+    }
+
+    function cycleKey(dateStr) {
+        const bd = billDay();
+        let [y, m, d] = dateStr.split('-').map(Number);
+        if (d < bd) { m -= 1; if (m === 0) { m = 12; y -= 1; } }
+        return `${y}-${pad(m)}-${pad(bd)}`;
+    }
+    function cycleInfo(key) {
+        const [y, m, d] = key.split('-').map(Number);
+        const start = new Date(y, m - 1, d);
+        const end = new Date(y, m, d - 1);
+        const days = Math.round((end - start) / 86400000) + 1;
+        const label = `${start.getDate()} ${MON[start.getMonth()]} – ${end.getDate()} ${MON[end.getMonth()]} ${end.getFullYear()}`;
+        return { start, end, days, label };
+    }
+
+    function renderCycles() {
+        const set = (id, v) => { $(id).textContent = v; };
+        const today = dayStr(new Date());
+        const curKey = cycleKey(today);
+        const keys = new Set(slices.map(r => cycleKey(r.date)));
+        keys.add(curKey);
+        const list = [...keys].sort().reverse();
+        if (!cycleChoice || !keys.has(cycleChoice)) cycleChoice = curKey;
+        const sel = $('cycleSel');
+        sel.innerHTML = list.map(k => `<option value="${k}">${cycleInfo(k).label}${k === curKey ? ' (current)' : ''}</option>`).join('');
+        sel.value = cycleChoice;
+
+        const isHome = (r) => CAT[r.type] && CAT[r.type].kind === 'home';
+        const statsFor = (k) => {
+            const inC = (r) => cycleKey(r.date) === k;
+            return { h: agg(slices.filter(r => inC(r) && isHome(r))), all: agg(slices.filter(inC)) };
+        };
+
+        const info = cycleInfo(cycleChoice);
+        const { h, all } = statsFor(cycleChoice);
+        const isCur = cycleChoice === curKey;
+        const elapsed = isCur ? Math.max(1, Math.min(info.days, Math.round((new Date(today + 'T00:00') - info.start) / 86400000) + 1)) : info.days;
+        set('cKwh', `${num(h.kwh, 1)} kWh`);
+        set('cKwhSub', info.label);
+        set('cCost', money(h.cost));
+        set('cCostSub', h.kwh > 0 ? `RM ${num(h.cost / h.kwh)} per kWh` : ' ');
+        set('cSessions', String(h.n));
+        set('cAvg', `${num(h.kwh / elapsed, 1)} kWh`);
+        set('cAvgSub', isCur ? `day ${elapsed} of ${info.days}` : `over ${info.days} days`);
+        set('cProj', isCur ? `${num(h.kwh / elapsed * info.days, 0)} kWh` : '-');
+        set('cProjSub', isCur ? 'if the pace continues' : 'current cycle only');
+        set('cShare', all.kwh > 0 ? `${(h.kwh / all.kwh * 100).toFixed(0)}%` : '-');
+        $('cycleText').textContent = `Home means the granny charger and AC home wallbox. Compare the kWh with your TNB bill to see how much of it is your EV. Overnight sessions are split between days, so a charge that crosses the ${billDay()}th is shared between two cycles.`;
+
+        $('cycleTableBody').innerHTML = list.map(k => {
+            const st = statsFor(k);
+            return `<tr><td class="nowrap" style="font-weight: 700;">${escapeHtml(cycleInfo(k).label)}${k === curKey ? ' <span class="hint">(current)</span>' : ''}</td>` +
+                `<td class="nowrap">${num(st.h.kwh)}</td><td class="green nowrap" style="font-weight: 700;">${money(st.h.cost)}</td><td>${st.h.n}</td>` +
+                `<td>${st.all.kwh > 0 ? (st.h.kwh / st.all.kwh * 100).toFixed(0) + '%' : '-'}</td></tr>`;
+        }).join('');
+    }
+
+    function buildPowerGrid() {
+        $('powerGrid').innerHTML = CATS.filter(c => POWER_DEFAULT[c.id]).map(c => `
+            <div class="form-group">
+                <label>${escapeHtml(c.label)} power (kW)</label>
+                <input type="number" step="0.1" min="0.5" data-power="${c.id}">
+                <div class="hint" id="powerMeasured_${c.id}" style="margin-top: 0;"></div>
+            </div>`).join('');
+    }
+    function fillScheduleForm() {
+        $('billDay').value = billDay();
+        $('powerGrid').querySelectorAll('input[data-power]').forEach(input => {
+            input.value = effPower(CATS.find(c => c.id === input.dataset.power));
+        });
+    }
+    // Average real charging power from sessions where you entered the finish time.
+    function updatePowerHints() {
+        const sums = {};
+        records.forEach(r => {
+            const cat = CAT[r.type];
+            if (!cat || !POWER_DEFAULT[cat.id] || !r.endTime) return;
+            const sp = sessionSpan(r);
+            if (!sp || sp.source !== 'entered') return;
+            const hrs = (sp.end - sp.start) / 3600000;
+            if (!(hrs > 0.5)) return;
+            const x = sums[cat.id] = sums[cat.id] || { kwh: 0, hrs: 0, n: 0 };
+            x.kwh += r.kwh; x.hrs += hrs; x.n++;
+        });
+        CATS.forEach(c => {
+            const el = $('powerMeasured_' + c.id);
+            if (!el) return;
+            const x = sums[c.id];
+            el.textContent = x ? `Measured about ${(x.kwh / x.hrs).toFixed(1)} kW from ${x.n} session(s) with a finish time` : 'Enter finish times on a few sessions to measure this';
+        });
+    }
+    async function saveSchedule() {
+        const day = parseInt($('billDay').value, 10);
+        if (!(day >= 1 && day <= 28)) { toast('Bill cycle day must be between 1 and 28.'); return; }
+        const power = {};
+        for (const input of $('powerGrid').querySelectorAll('input[data-power]')) {
+            const v = parseFloat(input.value);
+            if (!(v >= 0.5 && v <= 50)) { toast('Enter a realistic charging power in kW.'); return; }
+            power[input.dataset.power] = v;
+        }
+        try {
+            await setDoc(prefsRef(), { bill: { day }, power }, { merge: true });
+            toast('Bill cycle and power saved.');
+        } catch (err) {
+            console.error(err);
+            toast('Save failed: ' + (err.code || err.message));
         }
     }
 
@@ -1124,7 +1363,7 @@
 
     /* ---------- Dashboard ---------- */
     function monthsList() {
-        return [...new Set(records.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
+        return [...new Set(slices.map(r => r.date ? r.date.substring(0, 7) : ''))].filter(Boolean).sort();
     }
 
     function setViewOptions() {
@@ -1146,6 +1385,7 @@
     }
 
     function renderAllViews() {
+        slices = records.flatMap((r) => sliceRecord(r));
         setViewOptions();
         renderTiles();
         renderChart();
@@ -1154,8 +1394,15 @@
         renderCpoTable();
         renderEfficiency();
         renderBattery();
+        renderCycles();
+        updatePowerHints();
         updateSocHint();
+        updateSplitHint();
         renderRawTable();
+    }
+
+    function periodSlices() {
+        return period === 'all' ? slices : slices.filter(r => r.date && r.date.substring(0, 7) === period);
     }
 
     function periodRecords() {
@@ -1163,7 +1410,7 @@
     }
 
     function renderTiles() {
-        const list = periodRecords();
+        const list = periodSlices();
         const t = agg(list);
         const home = agg(list.filter(r => CAT[r.type] && CAT[r.type].kind === 'home'));
         const outside = agg(list.filter(r => isOutsideType(r.type)));
@@ -1198,19 +1445,19 @@
         if (!canvas || canvas.offsetParent === null || typeof Chart === 'undefined') return;
         const ctx = canvas.getContext('2d');
         if (monthlyChartInstance) { monthlyChartInstance.destroy(); monthlyChartInstance = null; }
-        if (!records.length) return;
+        if (!slices.length) return;
 
         const months = monthsList();
         const metricOf = (r) => currentSummaryView === 'cost' ? (r.total || 0) : (r.kwh || 0);
         const monthlyTotals = {};
         months.forEach(m => {
-            monthlyTotals[m] = records.filter(r => r.date && r.date.substring(0, 7) === m).reduce((s, r) => s + metricOf(r), 0);
+            monthlyTotals[m] = slices.filter(r => r.date && r.date.substring(0, 7) === m).reduce((s, r) => s + metricOf(r), 0);
         });
 
         const datasets = CATS.map(cat => {
             const rawValues = [];
             const data = months.map(m => {
-                const val = records.filter(r => r.date && r.date.substring(0, 7) === m && r.type === cat.key).reduce((s, r) => s + metricOf(r), 0);
+                const val = slices.filter(r => r.date && r.date.substring(0, 7) === m && r.type === cat.key).reduce((s, r) => s + metricOf(r), 0);
                 rawValues.push(val);
                 if (currentDisplayMode === 'percent') {
                     const total = monthlyTotals[m] || 0;
@@ -1271,15 +1518,15 @@
 
     function renderSummaryTable() {
         const tbody = $('summaryTableBody');
-        if (!records.length) { tbody.innerHTML = emptyRow(5); return; }
+        if (!slices.length) { tbody.innerHTML = emptyRow(5); return; }
         tbody.innerHTML = monthsList().reverse().map(m =>
-            statRow(m, agg(records.filter(r => r.date && r.date.substring(0, 7) === m)))
+            statRow(m, agg(slices.filter(r => r.date && r.date.substring(0, 7) === m)))
         ).join('');
     }
 
     function renderCatTable() {
         const tbody = $('catTableBody');
-        const list = periodRecords();
+        const list = periodSlices();
         if (!list.length) { tbody.innerHTML = emptyRow(5); return; }
         tbody.innerHTML = CATS.map(c => {
             const a = agg(list.filter(r => r.type === c.key));
@@ -1290,7 +1537,7 @@
 
     function renderCpoTable() {
         const tbody = $('cpoTableBody');
-        const list = periodRecords().filter(r => isOutsideType(r.type));
+        const list = periodSlices().filter(r => isOutsideType(r.type));
         if (!list.length) { tbody.innerHTML = emptyRow(5); return; }
         const groups = {};
         list.forEach(r => {
@@ -1345,7 +1592,7 @@
             else if (cat && cat.kind === 'office') cpo = OFFICE_CPO;
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="nowrap">${escapeHtml(r.date)} ${escapeHtml(r.time)}</td>
+                <td class="nowrap">${escapeHtml(r.date)} ${escapeHtml(r.time)}${overnightNote(r)}</td>
                 <td>${cat ? `<span class="swatch" style="background:${cat.color}"></span>` : ''}${escapeHtml(catLabel(r.type))}</td>
                 <td>${escapeHtml(cpo)}</td>
                 <td class="nowrap">${escapeHtml(r.power || '-')}</td>
@@ -1366,9 +1613,9 @@
         if (!records.length) { toast('No data to export.'); return; }
         const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
         const sorted = [...records].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-        let csv = 'Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM),Odometer (km),Battery Before (%),Battery After (%)\n';
+        let csv = 'Date,Time,Charger Type,CPO,Power (kW),kWh,Rate (RM/kWh),Total Cost (RM),Odometer (km),Battery Before (%),Battery After (%),End Time\n';
         sorted.forEach(r => {
-            csv += [q(r.date), q(r.time), q(r.type), q(r.cpo || '-'), q(r.power || '-'), r.kwh, r.rate, (r.total || 0).toFixed(2), r.odometer || '', r.socBefore ?? '', r.socAfter ?? ''].join(',') + '\n';
+            csv += [q(r.date), q(r.time), q(r.type), q(r.cpo || '-'), q(r.power || '-'), r.kwh, r.rate, (r.total || 0).toFixed(2), r.odometer || '', r.socBefore ?? '', r.socAfter ?? '', r.endTime || ''].join(',') + '\n';
         });
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1510,6 +1757,8 @@
                 const sbP = parseFloat(c[9]), saP = parseFloat(c[10]);
                 if (!isNaN(sbP) && sbP >= 0 && sbP <= 100) r.socBefore = sbP;
                 if (!isNaN(saP) && saP >= 0 && saP <= 100) r.socAfter = saP;
+                const endP = (c[11] || '').trim();
+                if (/^\d{2}:\d{2}$/.test(endP)) r.endTime = endP;
                 const key = sigOf(r);
                 if (existing.has(key)) {
                     // already saved: just fill in / correct the odometer reading if the CSV has one
@@ -1518,7 +1767,8 @@
                     if (r.odometer) extra.odometer = r.odometer;
                     if (r.socBefore !== undefined) extra.socBefore = r.socBefore;
                     if (r.socAfter !== undefined) extra.socAfter = r.socAfter;
-                    const changed = Object.entries(extra).filter(([k, v]) => Number(old[k]) !== v);
+                    if (r.endTime !== undefined) extra.endTime = r.endTime;
+                    const changed = Object.entries(extra).filter(([k, v]) => typeof v === 'number' ? Number(old[k]) !== v : String(old[k] || '') !== v);
                     if (changed.length) toUpdate.push({ id: old.id, fields: Object.fromEntries(changed) });
                     else skipped++;
                     return;
@@ -1552,6 +1802,7 @@
     /* ---------- Init ---------- */
     buildTypeSelect();
     buildEffGrid();
+    buildPowerGrid();
     refreshCpoOptions();
     resetFormTime();
     applyTypeUI(true);
@@ -1559,7 +1810,8 @@
     updateOdoHint();
     setViewOptions();
 
-    $('chargerType').addEventListener('change', () => { applyTypeUI(true); updateSocHint(); });
+    $('chargerType').addEventListener('change', () => { applyTypeUI(true); updateSocHint(); updateSplitHint(); });
+    ['entryDate', 'entryTime', 'entryEnd', 'entryKwh', 'chargerPower'].forEach(id => $(id).addEventListener('input', updateSplitHint));
     ['entryKwh', 'entrySocBefore', 'entrySocAfter'].forEach(id => $(id).addEventListener('input', updateSocHint));
     $('cpoSelect').addEventListener('change', toggleOther);
     $('entryKwh').addEventListener('input', updateTotal);
@@ -1586,6 +1838,8 @@
     $('resetRatesBtn').addEventListener('click', resetRates);
     $('savePetrolBtn').addEventListener('click', savePetrol);
     $('saveBattBtn').addEventListener('click', saveBattery);
+    $('saveSchedBtn').addEventListener('click', saveSchedule);
+    $('cycleSel').addEventListener('change', (e) => { cycleChoice = e.target.value; renderCycles(); });
     $('applyMeasuredBtn').addEventListener('click', applyMeasured);
 
     // Installable app (PWA)
