@@ -134,6 +134,7 @@
             <button type="button" class="tab-btn" data-tab="tab2">2. Dashboard</button>
             <button type="button" class="tab-btn" data-tab="tab3">3. Records</button>
             <button type="button" class="tab-btn" data-tab="tab4">4. Settings</button>
+            <button type="button" class="tab-btn" data-tab="tab5">5. Calculator</button>
         </div>
 
         <!-- TAB 1: LOG -->
@@ -388,6 +389,56 @@
             </div>
         </div>
 
+        <!-- TAB 5: CALCULATOR -->
+        <div id="tab5" class="tab-content">
+            <div class="card">
+                <div class="card-title">Charging calculator</div>
+                <p>Estimate the cost and time of a charge before you plug in. It uses the battery capacity and charging efficiency from Settings.</p>
+                <div class="form-grid">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Charger type</label>
+                        <select id="calcType"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Rate (RM / kWh)</label>
+                        <input type="number" id="calcRate" step="0.01" min="0" inputmode="decimal">
+                    </div>
+                    <div class="form-group">
+                        <label>Charger power (kW)</label>
+                        <input type="number" id="calcPower" step="0.1" min="0.5" inputmode="decimal" placeholder="e.g. 7, 22, 60, 120">
+                    </div>
+                    <div class="form-group">
+                        <label>Battery now (%), optional</label>
+                        <input type="number" id="calcNow" step="1" min="0" max="100" inputmode="numeric" placeholder="e.g. 20">
+                    </div>
+                    <div class="form-group">
+                        <label>Battery to add (%)</label>
+                        <input type="number" id="calcAdd" step="1" min="1" max="100" inputmode="numeric" placeholder="e.g. 60">
+                    </div>
+                    <div class="form-group">
+                        <label>Car max charge power (kW), optional</label>
+                        <input type="number" id="calcMax" step="0.1" min="0.5" inputmode="decimal" placeholder="if lower than the charger">
+                    </div>
+                    <div class="form-group">
+                        <label>Start time</label>
+                        <input type="datetime-local" id="calcStart">
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Estimate</div>
+                <div class="tiles" style="margin-top: 0.9rem;">
+                    <div class="tile"><div class="t-label">Estimated cost</div><div class="t-value green" id="calcCost">-</div><div class="t-sub" id="calcCostSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Charging time</div><div class="t-value" id="calcTime">-</div><div class="t-sub" id="calcTimeSub">&nbsp;</div></div>
+                    <div class="tile"><div class="t-label">Finishes</div><div class="t-value" id="calcFinish" style="font-size: 1.05rem;">-</div><div class="t-sub">estimated</div></div>
+                    <div class="tile"><div class="t-label">Energy billed</div><div class="t-value" id="calcBilled">-</div><div class="t-sub">kWh at the charger</div></div>
+                    <div class="tile"><div class="t-label">Into the battery</div><div class="t-value" id="calcBat">-</div><div class="t-sub" id="calcBatSub">kWh</div></div>
+                    <div class="tile"><div class="t-label">Final battery</div><div class="t-value" id="calcFinal">-</div><div class="t-sub" id="calcFinalSub">&nbsp;</div></div>
+                </div>
+                <p id="calcNote"></p>
+            </div>
+        </div>
+
         <!-- TAB 4: SETTINGS -->
         <div id="tab4" class="tab-content">
             <div class="card">
@@ -561,6 +612,7 @@
         tabButtons.forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === id));
         tabContents.forEach(c => c.classList.toggle('active', c.id === id));
         renderAllViews();
+        if (id === 'tab5') calcOnOpen();
     }
     tabButtons.forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
 
@@ -619,6 +671,7 @@
             renderRatesForm();
             renderAllViews();
             if (!editingId) applyTypeUI(true);
+            if (!calcTouched) calcApplyType(); else runCalc();
         }, (err) => console.error(err));
     }
 
@@ -1055,6 +1108,117 @@
             console.error(err);
             toast('Save failed: ' + (err.code || err.message));
         }
+    }
+
+    /* ---------- Charging calculator ---------- */
+    const DAYN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    let calcTouched = false;      // user changed the rate or power, so keep their numbers
+    let calcStartTouched = false;
+
+    const fmtDur = (h) => {
+        const m = Math.round(h * 60);
+        const hh = Math.floor(m / 60), mm = m % 60;
+        return hh > 0 ? `${hh}h ${pad(mm)}m` : `${mm} min`;
+    };
+    const fmtWhen = (d) => `${DAYN[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}, ${hhmm(d)}`;
+    const localInputValue = (d) => `${dayStr(d)}T${hhmm(d)}`;
+
+    // Share energy across the calendar days between start and end (by time).
+    function splitByDay(start, end, kwh) {
+        const total = end - start, out = [];
+        let cursor = start;
+        while (cursor < end && out.length < 15) {
+            const next = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+            const segEnd = next < end ? next : end;
+            out.push({ date: dayStr(cursor), kwh: kwh * (segEnd - cursor) / total });
+            cursor = segEnd;
+        }
+        return out;
+    }
+
+    function buildCalcTypes() {
+        $('calcType').innerHTML = CATS.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+    }
+
+    function calcApplyType() {
+        const cat = CAT[$('calcType').value];
+        $('calcRate').value = rateFor(cat).toFixed(2);
+        $('calcPower').value = (cat.kind === 'home' || cat.kind === 'office') ? effPower(cat) : '';
+        runCalc();
+    }
+
+    function runCalc() {
+        const set = (id, v) => { $(id).textContent = v; };
+        const clear = (msg) => {
+            ['calcCost', 'calcTime', 'calcFinish', 'calcBilled', 'calcBat', 'calcFinal'].forEach(id => set(id, '-'));
+            ['calcCostSub', 'calcTimeSub', 'calcFinalSub'].forEach(id => set(id, ' '));
+            $('calcNote').textContent = msg;
+        };
+        const cat = CAT[$('calcType').value];
+        const cap = battCap();
+        const now = numOrNull($('calcNow').value);
+        let add = numOrNull($('calcAdd').value);
+        const rate = numOrNull($('calcRate').value);
+        const pw = numOrNull($('calcPower').value);
+        const carMax = numOrNull($('calcMax').value);
+
+        if (!(add > 0)) return clear('Enter how many percent of the battery you want to add.');
+        if (now !== null && (now < 0 || now > 100)) return clear('Battery now must be between 0 and 100.');
+        let note = '';
+        if (now !== null && now + add > 100) {
+            add = 100 - now;
+            if (!(add > 0)) return clear('The battery is already full.');
+            note += `Capped at 100%, so adding ${add.toFixed(0)}%. `;
+        }
+        if (rate === null || rate < 0) return clear('Enter the charger rate in RM per kWh.');
+
+        const eta = effUsed(cat) / 100;
+        const batKwh = add / 100 * cap;
+        const billed = batKwh / eta;
+        const cost = billed * rate;
+        set('calcCost', money(cost));
+        set('calcCostSub', `${num(billed, 1)} kWh at RM ${num(rate)}`);
+        set('calcBilled', `${num(billed, 1)} kWh`);
+        set('calcBat', `${num(batKwh, 1)} kWh`);
+        set('calcFinal', now !== null ? `${(now + add).toFixed(0)}%` : '-');
+        set('calcFinalSub', now !== null ? `from ${now.toFixed(0)}%, adding ${add.toFixed(0)}%` : `adding ${add.toFixed(0)}%`);
+        note += `Assumes a ${cap} kWh battery and ${(eta * 100).toFixed(0)}% charging efficiency for this charger type (both in Settings). `;
+
+        if (!(pw > 0)) {
+            set('calcTime', '-'); set('calcTimeSub', ' '); set('calcFinish', '-');
+            $('calcNote').textContent = note + 'Enter the charger power (kW) to estimate the time.';
+            return;
+        }
+        const peff = carMax > 0 ? Math.min(pw, carMax) : pw;
+        let hours;
+        if (cat.id === 'dcout') {
+            // DC fast charging slows down above roughly 80%
+            const from = now !== null ? now : 0;
+            const low = Math.max(0, Math.min(from + add, 80) - Math.min(from, 80));
+            const high = add - low;
+            hours = (billed * low / add) / peff + (billed * high / add) / (peff * 0.35);
+            note += 'DC charging slows above about 80%, so the time is a rough estimate. ';
+        } else {
+            hours = billed / peff;
+        }
+        set('calcTime', fmtDur(hours));
+        set('calcTimeSub', `at ${num(peff, 1)} kW${peff < pw ? ' (car limit)' : ''}`);
+
+        const startVal = $('calcStart').value;
+        let start = startVal ? new Date(startVal) : new Date();
+        if (isNaN(start)) start = new Date();
+        const end = new Date(start.getTime() + hours * 3600000);
+        set('calcFinish', fmtWhen(end));
+        if (dayStr(start) !== dayStr(new Date(end.getTime() - 1))) {
+            note += 'Overnight: energy by day is ' + splitByDay(start, end, billed)
+                .map(p => `${num(p.kwh, 1)} kWh on ${p.date.slice(8)}/${p.date.slice(5, 7)}`).join(', ') + '. ';
+        }
+        $('calcNote').textContent = note.trim();
+    }
+
+    function calcOnOpen() {
+        if (!calcStartTouched) $('calcStart').value = localInputValue(new Date());
+        runCalc();
     }
 
     /* ---------- Battery & charging efficiency ---------- */
@@ -1803,6 +1967,9 @@
     buildTypeSelect();
     buildEffGrid();
     buildPowerGrid();
+    buildCalcTypes();
+    calcApplyType();
+    $('calcStart').value = localInputValue(new Date());
     refreshCpoOptions();
     resetFormTime();
     applyTypeUI(true);
@@ -1839,6 +2006,10 @@
     $('savePetrolBtn').addEventListener('click', savePetrol);
     $('saveBattBtn').addEventListener('click', saveBattery);
     $('saveSchedBtn').addEventListener('click', saveSchedule);
+    $('calcType').addEventListener('change', () => { calcTouched = false; calcApplyType(); });
+    ['calcRate', 'calcPower'].forEach(id => $(id).addEventListener('input', () => { calcTouched = true; runCalc(); }));
+    ['calcNow', 'calcAdd', 'calcMax'].forEach(id => $(id).addEventListener('input', runCalc));
+    $('calcStart').addEventListener('input', () => { calcStartTouched = true; runCalc(); });
     $('cycleSel').addEventListener('change', (e) => { cycleChoice = e.target.value; renderCycles(); });
     $('applyMeasuredBtn').addEventListener('click', applyMeasured);
 
